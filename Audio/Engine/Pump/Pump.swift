@@ -92,6 +92,10 @@ public final class Pump {
 	/// Channel fitting from the chain's output to the device.
 	private var downmix: DownmixProcessor?
 	private var fitSource: StreamFormat?
+	/// Whether the fit sends mono to the center, rather than front left and
+	/// right. Only for speakers: mono is never spatialized.
+	private var fitMonoToCenter = false
+	static let monoToCenterKey = "sendMonoToCenter"
 
 	/// The track whose frames are being read, for its ReplayGain.
 	private var gainTrack: EngineTrack?
@@ -108,6 +112,8 @@ public final class Pump {
 	public struct Processing: Equatable {
 		/// The stages that ran, in chain order.
 		public var stages: [ObjectIdentifier] = []
+		/// What those that describe themselves applied, in chain order.
+		public var inspections: [StageInspection] = []
 		/// The format the stages were given.
 		public var input = StreamFormat(sampleRate: 0, channels: 0)
 		/// The format the stages produced.
@@ -210,7 +216,9 @@ public final class Pump {
 		while isRunning {
 			let start = EngineLog.now()
 			let gap = EngineLog.milliseconds(since: last)
-			let worked = pass()
+			// One pool per pass: this thread has no other, so whatever a pass (or a DSP stage) autoreleases would
+			// otherwise live as long as playback
+			let worked = autoreleasepool { pass() }
 			let took = EngineLog.milliseconds(since: start)
 			if gap > EngineLog.slowPass * 1000 || took > EngineLog.slowPass * 1000 {
 				let shallowMs = Double(cog_ring_readable(ring)) / outputFormat.sampleRate * 1000
@@ -325,8 +333,8 @@ public final class Pump {
 		applyGain(frames: got, channels: channels)
 		runStages()
 		emit()
-		report(Processing(stages: configuredChain?.stages ?? [], input: configuredChain?.input ?? format, output: fitSource ?? format,
-		                  fitsChannels: downmix != nil, appliesGain: appliedGain != 1 || rampTarget != 1),
+		report(Processing(stages: configuredChain?.stages ?? [], inspections: activeInspections(), input: configuredChain?.input ?? format,
+		                  output: fitSource ?? format, fitsChannels: downmix != nil, appliesGain: appliedGain != 1 || rampTarget != 1),
 		       at: position)
 		return true
 	}
@@ -337,6 +345,12 @@ public final class Pump {
 		guard processing != reportedProcessing else { return }
 		reportedProcessing = processing
 		presentation.append(.processing(processing), at: position)
+	}
+
+	/// The settings the configured chain's stages applied to the last block.
+	private func activeInspections() -> [StageInspection] {
+		guard let chain = configuredChain else { return [] }
+		return stages.filter { chain.stages.contains(ObjectIdentifier($0)) }.compactMap(\.inspection)
 	}
 
 	private func isDoP(_ buffer: DSPBuffer) -> Bool {
@@ -457,13 +471,16 @@ public final class Pump {
 		} else {
 			downmix = DownmixProcessor(inputFormat: Self.asbd(format), inputConfig: inputConfig,
 			                           andOutputFormat: Self.asbd(outputFormat), outputConfig: outputFormat.channelConfig)
+			downmix?.monoToCenter = fitMonoToCenter
 		}
 	}
 
 	/// Fits `block` to the device's channel layout and writes it to the
 	/// shallow ring, waiting for room.
 	private func emit() {
-		if block.format != fitSource {
+		let monoToCenter = UserDefaults.standard.bool(forKey: Self.monoToCenterKey)
+		if block.format != fitSource || monoToCenter != fitMonoToCenter {
+			fitMonoToCenter = monoToCenter
 			configureFit(from: block.format)
 		}
 		let frames = block.frames

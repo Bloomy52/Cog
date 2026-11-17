@@ -81,10 +81,13 @@ static inline void dispatch_async_or_reentrant(dispatch_queue_t queue, dispatch_
 	}
 	va_end(objects);
 
-	// Invoke on the main operation queue
-	NSInvocationOperation *operation = [[NSInvocationOperation alloc] initWithInvocation:invocation];
-	NSOperationQueue *mainQueue = [NSOperationQueue mainQueue];
-	[mainQueue addOperation:operation];
+	// Invoke from the main run loop, not the main queue: stopping playback
+	// waits for the feeder while turning the run loop, and a feeder that
+	// dispatches to the main queue meanwhile (SandboxBroker does, opening a
+	// file) is only served if this is not itself running as a main queue
+	// block.
+	[invocation retainArguments];
+	[invocation performSelectorOnMainThread:@selector(invoke) withObject:nil waitUntilDone:NO];
 }
 
 @end
@@ -113,6 +116,10 @@ static inline void dispatch_async_or_reentrant(dispatch_queue_t queue, dispatch_
 	// Bumped by every play or stop, so a start deferred until an entry's
 	// tags load is dropped if something else happened meanwhile.
 	NSUInteger startToken;
+	// The entry last handed to the player, and where it starts, so that the
+	// position shows that offset, rather than 0, once the stream begins.
+	PlaylistEntry *startingEntry;
+	double startingPosition;
 }
 
 #define DEFAULT_SEEK 5
@@ -129,6 +136,7 @@ NSNotificationName CogPlaybackDidPrebufferNotification = @"CogPlaybackDidPrebuff
 
 @synthesize progressOverall;
 @synthesize progressJob;
+@synthesize progressMetadata;
 
 + (NSSet *)keyPathsForValuesAffectingSeekable {
 	return [NSSet setWithObjects:@"playlistController.currentEntry", @"playlistController.currentEntry.seekable", nil];
@@ -144,6 +152,7 @@ NSNotificationName CogPlaybackDidPrebufferNotification = @"CogPlaybackDidPrebuff
 
 		progressOverall = nil;
 		progressJob = nil;
+		progressMetadata = nil;
 
 		audioPlayer = [AudioPlayer new];
 		[audioPlayer setDelegate:self];
@@ -192,14 +201,14 @@ NSNotificationName CogPlaybackDidPrebufferNotification = @"CogPlaybackDidPrebuff
 	[[NSUserDefaults standardUserDefaults] registerDefaults:defaultsDictionary];
 }
 
-static double speedScale(double input, double min, double max) {
-	input = (input - min) * 100.0 / (max - min);
-	return ((input * input) * (5.0 - 0.2) / 10000.0) + 0.2;
-}
-
-static double reverseSpeedScale(double input, double min, double max) {
-	input = sqrtf((input - 0.2) * 10000.0 / (5.0 - 0.2));
-	return (input * (max - min) / 100.0) + min;
+// Within the speed sliders' range; locked, the other follows, as the speed
+// popover's sliders do.
+static void setSpeed(NSString *key, NSString *lockedKey, double speed) {
+	speed = MIN(MAX(speed, 0.2), 5.0);
+	[[NSUserDefaults standardUserDefaults] setDouble:speed forKey:key];
+	if([[NSUserDefaults standardUserDefaults] boolForKey:@"speedLock"]) {
+		[[NSUserDefaults standardUserDefaults] setDouble:speed forKey:lockedKey];
+	}
 }
 
 - (void)snapSpeeds {
@@ -222,15 +231,7 @@ static double reverseSpeedScale(double input, double min, double max) {
 	[self setVolumeControlsValue:logarithmicToLinear(volume, MAX_VOLUME)];
 	[audioPlayer setVolume:volume];
 
-	double pitch = [[NSUserDefaults standardUserDefaults] doubleForKey:@"pitch"];
-	[pitchSlider setDoubleValue:reverseSpeedScale(pitch, [pitchSlider minValue], [pitchSlider maxValue])];
-	double tempo = [[NSUserDefaults standardUserDefaults] doubleForKey:@"tempo"];
-	[tempoSlider setDoubleValue:reverseSpeedScale(tempo, [tempoSlider minValue], [tempoSlider maxValue])];
-
 	[self snapSpeeds];
-
-	BOOL speedLock = [[NSUserDefaults standardUserDefaults] boolForKey:@"speedLock"];
-	[lockButton setTitle:speedLock ? @"🔒" : @"🔓"];
 
 	[self setSeekable:NO];
 }
@@ -302,13 +303,10 @@ static double reverseSpeedScale(double input, double min, double max) {
 
 - (IBAction)play:(id)sender {
 	if([playlistController shuffle] != ShuffleOff) {
-		PlaylistEntry *pe = nil;
-
+		// The selection, or where shuffle starts.
 		NSInteger index = [playlistView selectedRow];
-		if(index != -1) pe = [playlistController entryAtIndex:index];
-
-		pe = [playlistController shuffledEntryAtIndex:(pe ? pe.shuffleIndex : 0)];
-		[self playEntryAtIndex:pe.index];
+		PlaylistEntry *pe = index != -1 ? [playlistController entryAtIndex:index] : [playlistController firstEntryToPlay];
+		if(pe) [self playEntry:pe];
 	} else {
 		if([playlistView selectedRow] == -1)
 			[playlistView selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
@@ -435,6 +433,8 @@ NSDictionary *makeRGInfo(PlaylistEntry *pe) {
 	[self sendMetaData];
 
 	double seekTime = pe.seekable ? [offset doubleValue] : 0.0;
+	startingEntry = pe;
+	startingPosition = seekTime;
 
 	[audioPlayer performSelectorOnMainThread:@selector(playBG:withUserInfo:withRGInfo:startPaused:andSeekTo:) withObjects:pe.url, pe, makeRGInfo(pe), @(paused), @(seekTime), nil];
 }
@@ -582,6 +582,10 @@ NSDictionary *makeRGInfo(PlaylistEntry *pe) {
 	[miniPlusVolumeSlider setDoubleValue:value];
 }
 
+- (AudioPlayer *)audioPlayer {
+	return audioPlayer;
+}
+
 - (double)volume {
 	BOOL volumeLimit = [[[NSUserDefaultsController sharedUserDefaultsController] defaults] boolForKey:@"volumeLimit"];
 	const double MAX_VOLUME = (volumeLimit) ? 100.0 : 800.0;
@@ -689,49 +693,27 @@ NSDictionary *makeRGInfo(PlaylistEntry *pe) {
 	}
 }
 
-- (IBAction)changePitch:(id)sender {
-	const double pitch = speedScale([sender doubleValue], [pitchSlider minValue], [pitchSlider maxValue]);
-	DLog(@"PITCH: %lf", pitch);
-
-	[[NSUserDefaults standardUserDefaults] setDouble:pitch forKey:@"pitch"];
-
-	if([[NSUserDefaults standardUserDefaults] boolForKey:@"speedLock"]) {
-		[[NSUserDefaults standardUserDefaults] setDouble:pitch forKey:@"tempo"];
-	}
-
-	[self snapSpeeds];
-}
-
 + (BOOL)isVarispeed {
 	return [[[NSUserDefaults standardUserDefaults] stringForKey:@"rubberbandEngine"] isEqualToString:@"varispeed"];
 }
 
-- (IBAction)changeTempo:(id)sender {
-	const double tempo = speedScale([sender doubleValue], [tempoSlider minValue], [tempoSlider maxValue]);
-	DLog(@"TEMPO: %lf", tempo);
-
-	[[NSUserDefaults standardUserDefaults] setDouble:tempo forKey:@"tempo"];
-
-	if([[NSUserDefaults standardUserDefaults] boolForKey:@"speedLock"] && ![PlaybackController isVarispeed]) {
-		[[NSUserDefaults standardUserDefaults] setDouble:tempo forKey:@"pitch"];
-	}
-
-	[self snapSpeeds];
-}
-
+// Album skips go along the playing entry's playlist, whichever is shown.
 - (IBAction)skipToNextAlbum:(id)sender {
 	BOOL found = NO;
 
-	NSInteger index = [[playlistController currentEntry] index];
-	NSString *origAlbum = [[playlistController currentEntry] album];
+	PlaylistEntry *current = [playlistController currentEntry];
+	Playlist *playlist = current.playlist;
+	NSInteger index = [current index];
+	NSString *origAlbum = [current album];
+	NSInteger count = [[playlist orderedEntries] count];
 
 	NSInteger i;
 	NSString *curAlbum;
 
-	PlaylistEntry *pe;
+	PlaylistEntry *pe = nil;
 
-	for(i = 1; i < [[playlistController arrangedObjects] count]; i++) {
-		pe = [playlistController entryAtIndex:index + i];
+	for(i = 1; i < count; i++) {
+		pe = [playlistController.playbackOrder entryAtPosition:index + i inPlaylist:playlist];
 		if(pe == nil)
 			break;
 
@@ -751,7 +733,7 @@ NSDictionary *makeRGInfo(PlaylistEntry *pe) {
 	}
 
 	if(found) {
-		[self playEntryAtIndex:i + index];
+		[self playEntry:pe];
 	}
 }
 
@@ -759,16 +741,19 @@ NSDictionary *makeRGInfo(PlaylistEntry *pe) {
 	BOOL found = NO;
 	BOOL foundAlbum = NO;
 
-	NSInteger index = [[playlistController currentEntry] index];
-	NSString *origAlbum = [[playlistController currentEntry] album];
+	PlaylistEntry *current = [playlistController currentEntry];
+	Playlist *playlist = current.playlist;
+	NSInteger index = [current index];
+	NSString *origAlbum = [current album];
+	NSInteger count = [[playlist orderedEntries] count];
 	NSString *curAlbum;
 
 	NSInteger i;
 
 	PlaylistEntry *pe;
 
-	for(i = 1; i < [[playlistController arrangedObjects] count]; i++) {
-		pe = [playlistController entryAtIndex:index - i];
+	for(i = 1; i < count; i++) {
+		pe = [playlistController.playbackOrder entryAtPosition:index - i inPlaylist:playlist];
 		if(pe == nil)
 			break;
 
@@ -795,7 +780,8 @@ NSDictionary *makeRGInfo(PlaylistEntry *pe) {
 	if(found || foundAlbum) {
 		if(foundAlbum == YES)
 			i--;
-		[self playEntryAtIndex:index - i];
+		pe = [playlistController.playbackOrder entryAtPosition:index - i inPlaylist:playlist];
+		if(pe) [self playEntry:pe];
 	}
 }
 
@@ -821,71 +807,19 @@ NSDictionary *makeRGInfo(PlaylistEntry *pe) {
 }
 
 - (IBAction)pitchDown:(id)sender {
-	double pitch = speedScale([pitchSlider doubleValue], [pitchSlider minValue], [pitchSlider maxValue]);
-	double newPitch = pitch - DEFAULT_PITCH_DOWN;
-	if(newPitch < 0.2) {
-		newPitch = 0.2;
-	}
-	[pitchSlider setDoubleValue:reverseSpeedScale(newPitch, [pitchSlider minValue], [pitchSlider maxValue])];
-
-	[[NSUserDefaults standardUserDefaults] setDouble:newPitch forKey:@"pitch"];
-
-	if([[NSUserDefaults standardUserDefaults] boolForKey:@"speedLock"]) {
-		[tempoSlider setDoubleValue:reverseSpeedScale(newPitch, [tempoSlider minValue], [tempoSlider maxValue])];
-
-		[[NSUserDefaults standardUserDefaults] setDouble:newPitch forKey:@"tempo"];
-	}
+	setSpeed(@"pitch", @"tempo", [[NSUserDefaults standardUserDefaults] doubleForKey:@"pitch"] - DEFAULT_PITCH_DOWN);
 }
 
 - (IBAction)pitchUp:(id)sender {
-	double pitch = speedScale([pitchSlider doubleValue], [pitchSlider minValue], [pitchSlider maxValue]);
-	double newPitch = pitch + DEFAULT_PITCH_UP;
-	if(newPitch > 5.0) {
-		newPitch = 5.0;
-	}
-	[pitchSlider setDoubleValue:reverseSpeedScale(newPitch, [pitchSlider minValue], [pitchSlider maxValue])];
-
-	[[NSUserDefaults standardUserDefaults] setDouble:newPitch forKey:@"pitch"];
-
-	if([[NSUserDefaults standardUserDefaults] boolForKey:@"speedLock"]) {
-		[tempoSlider setDoubleValue:reverseSpeedScale(newPitch, [tempoSlider minValue], [tempoSlider maxValue])];
-
-		[[NSUserDefaults standardUserDefaults] setDouble:newPitch forKey:@"tempo"];
-	}
+	setSpeed(@"pitch", @"tempo", [[NSUserDefaults standardUserDefaults] doubleForKey:@"pitch"] + DEFAULT_PITCH_UP);
 }
 
 - (IBAction)tempoDown:(id)sender {
-	double tempo = speedScale([tempoSlider doubleValue], [tempoSlider minValue], [tempoSlider maxValue]);
-	double newTempo = tempo - DEFAULT_TEMPO_DOWN;
-	if(newTempo < 0.2) {
-		newTempo = 0.2;
-	}
-	[tempoSlider setDoubleValue:reverseSpeedScale(newTempo, [tempoSlider minValue], [tempoSlider maxValue])];
-
-	[[NSUserDefaults standardUserDefaults] setDouble:newTempo forKey:@"tempo"];
-
-	if([[NSUserDefaults standardUserDefaults] boolForKey:@"speedLock"]) {
-		[pitchSlider setDoubleValue:reverseSpeedScale(newTempo, [pitchSlider minValue], [pitchSlider maxValue])];
-
-		[[NSUserDefaults standardUserDefaults] setDouble:newTempo forKey:@"pitch"];
-	}
+	setSpeed(@"tempo", @"pitch", [[NSUserDefaults standardUserDefaults] doubleForKey:@"tempo"] - DEFAULT_TEMPO_DOWN);
 }
 
 - (IBAction)tempoUp:(id)sender {
-	double tempo = speedScale([tempoSlider doubleValue], [tempoSlider minValue], [tempoSlider maxValue]);
-	double newTempo = tempo + DEFAULT_TEMPO_UP;
-	if(newTempo > 5.0) {
-		newTempo = 5.0;
-	}
-	[tempoSlider setDoubleValue:reverseSpeedScale(newTempo, [tempoSlider minValue], [tempoSlider maxValue])];
-
-	[[NSUserDefaults standardUserDefaults] setDouble:newTempo forKey:@"tempo"];
-
-	if([[NSUserDefaults standardUserDefaults] boolForKey:@"speedLock"]) {
-		[pitchSlider setDoubleValue:reverseSpeedScale(newTempo, [pitchSlider minValue], [pitchSlider maxValue])];
-
-		[[NSUserDefaults standardUserDefaults] setDouble:newTempo forKey:@"pitch"];
-	}
+	setSpeed(@"tempo", @"pitch", [[NSUserDefaults standardUserDefaults] doubleForKey:@"tempo"] + DEFAULT_TEMPO_UP);
 }
 
 - (void)audioPlayer:(AudioPlayer *)player displayEqualizer:(void *)eq {
@@ -958,10 +892,15 @@ NSDictionary *makeRGInfo(PlaylistEntry *pe) {
 
 		self->lastPosition = -10;
 
+		// A track started part-way, as when resuming on launch, begins at its
+		// offset. Paused, no timer would move the position off 0 until played.
+		double start = (pe && pe == self->startingEntry) ? self->startingPosition : 0.0;
+		self->startingEntry = nil;
+
 		if(!isSameEntry) {
 			[[NSNotificationCenter defaultCenter] postNotificationName:CogPlaybackWillResetPositionNotification object:self];
 		}
-		[self setPosition:0];
+		[self setPosition:start];
 	});
 
 	if(pe) {
@@ -1163,7 +1102,8 @@ NSDictionary *makeRGInfo(PlaylistEntry *pe) {
 		}
 		[songInfo setObject:@(entry.currentPosition) forKey:MPNowPlayingInfoPropertyElapsedPlaybackTime];
 		[songInfo setObject:entry.length forKey:MPMediaItemPropertyPlaybackDuration];
-		[songInfo setObject:@(entry.index) forKey:MPMediaItemPropertyPersistentID];
+		// Unique across playlists, unlike the entry's position.
+		[songInfo setObject:@((unsigned long long)[[[entry.objectID URIRepresentation] absoluteString] hash]) forKey:MPMediaItemPropertyPersistentID];
 	}
 
     if (entry) {

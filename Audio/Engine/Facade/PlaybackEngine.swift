@@ -304,6 +304,7 @@ import Foundation
 		currentTrack = track
 		currentOffset = seconds
 		currentHeard = false
+		trackCounts = TrackCounts()
 		amountPlayed = seconds
 		resetInterval()
 		scrobbleReported = false
@@ -314,6 +315,9 @@ import Foundation
 
 	/// How the current pipeline drives the device.
 	private var outputPlan = OutputPlan.shared
+	/// The decoder properties `outputPlan` was made from, standing in for
+	/// the first track's own until the feeder has decoded some of it.
+	private var plannedProperties: [AnyHashable: Any] = [:]
 	/// A device that could not be held exclusively (another process holds
 	/// it, or it would not start): planned as shared until playback stops or
 	/// the setting changes, so that not every track tries again.
@@ -380,6 +384,7 @@ import Foundation
 			plan = Self.plan(for: properties, device: device)
 		}
 		outputPlan = plan
+		plannedProperties = properties
 
 		guard let feeder = Feeder(outputRate: output.format.sampleRate, opener: opener, dsdAsDoP: plan.dop),
 		      let pump = Pump(feeder: feeder, outputFormat: output.format, stages: [timeStretch, freeSurround, equalizer, visualization], carrier: plan.dop,
@@ -403,6 +408,7 @@ import Foundation
 		reportedUnderruns = 0
 		reportedDiscontinuities = 0
 		lastBeat = nil
+		cog_renderer_set_metering(renderer, meteringEnabled)
 		output.attach(renderer)
 		cog_gain_ramp_to(cog_renderer_volume(renderer), Float(volumeLevel * 0.01), 0)
 		cog_gain_ramp_to(cog_renderer_transport(renderer), fadeFrames > 0 ? 0 : 1, 0)
@@ -698,13 +704,16 @@ import Foundation
 
 	@objc public func resume() {
 		guard let renderer else { return }
+		resumesAfterInterruption = false
 		switch phase {
 		case .prebuffering:
 			phase = .prebuffering(paused: false)
 		case .paused, .pausing:
 			cancelSuspend()
+			// Still paused if the device will not start, so that pressing
+			// play again tries again instead of pausing the silence.
+			guard startDevice() else { return }
 			cog_renderer_set_held(renderer, false)
-			startDevice()
 			rampTransport(renderer, to: 1, frames: fadeFrames)
 			phase = .playing
 			postPrebuffered()
@@ -752,8 +761,15 @@ import Foundation
 
 	/// Stops the device a while into a pause, as OutputCoreAudio did.
 	private var suspendTimer: Timer?
-	/// As OutputCoreAudio's idle timer; shortened by tests.
+	/// As OutputCoreAudio's idle timer; shortened by tests. None on iOS: it
+	/// has no DoP to keep locked, and it takes a running unit for playing
+	/// whatever Now Playing says, so until the unit stops the Lock Screen
+	/// shows playing, and headphones send Pause when asked to play.
+	#if os(iOS)
+	var suspendDelay: TimeInterval = 0
+	#else
 	var suspendDelay: TimeInterval = 10
+	#endif
 
 	/// Whether the device is running, for tests.
 	var isDeviceRunning: Bool { output?.isRunning ?? false }
@@ -785,18 +801,38 @@ import Foundation
 
 	/// Starts the device. One held exclusively that will not start is given
 	/// up and playback restarts through shared output, so asking for
-	/// exclusive output never turns a playable track into silence.
-	private func startDevice() {
-		guard let output else { return }
+	/// exclusive output never turns a playable track into silence. Returns
+	/// whether playback is under way, by either road.
+	@discardableResult
+	private func startDevice() -> Bool {
+		guard let output else { return false }
 		do {
 			try output.start()
 		} catch {
 			EngineLog.logger.error("The device would not start: \(error.localizedDescription, privacy: .public)")
-			guard output.isExclusive, !rebuildRequested else { return }
+			guard output.isExclusive else { return false }
+			guard !rebuildRequested else { return true }
 			exclusiveRefused = output.deviceID
 			rebuildRequested = true
 			host?.playbackEngineRestartAtCurrentPosition(currentTrack?.userInfo)
 		}
+		return true
+	}
+
+	/// Whether an interruption paused playback, to resume when it ends.
+	private var resumesAfterInterruption = false
+
+	/// The system stopped the device: paused, as far as anyone can tell, so
+	/// say so. No suspend is scheduled, as stopping the output would forget
+	/// the interruption, and nothing renders, so nothing fades either.
+	private func interrupted() {
+		guard case .playing = phase, let renderer else { return }
+		cancelSuspend()
+		rampTransport(renderer, to: 0, frames: 0)
+		cog_renderer_set_held(renderer, true)
+		phase = .paused
+		resumesAfterInterruption = true
+		host?.playbackEngineDidChangeStatus(.paused, userInfo: currentTrack?.userInfo)
 	}
 
 	/// Exclusive output was turned on or off: a pipeline it changes restarts
@@ -823,9 +859,14 @@ import Foundation
 	}
 
 	/// Whether the track being heard would now be planned differently.
+	/// Until the feeder has started it, the track is planned from the
+	/// properties the pipeline was built for: a slow decoder (a MIDI synth
+	/// loading) has not started when the notification of the build's own
+	/// rate switch arrives, and planned from nothing it would get shared
+	/// output, and a restart.
 	private func wantsAnotherPlan() -> Bool {
 		guard let output, let track = currentTrack else { return false }
-		return Self.plan(for: track.sourceProperties ?? [:], device: planning(for: output)) != outputPlan
+		return Self.plan(for: track.sourceProperties ?? plannedProperties, device: planning(for: output)) != outputPlan
 	}
 
 	/// The setting changed while paused: start or stop the clock, and run
@@ -866,7 +907,9 @@ import Foundation
 		initialTrack = nil
 		seekPending = false
 		rebuildRequested = false
+		resumesAfterInterruption = false
 		outputPlan = .shared
+		plannedProperties = [:]
 		if releasingDevice {
 			// Other apps may play again.
 			output?.releaseExclusive()
@@ -900,17 +943,17 @@ import Foundation
 
 		let discontinuities = cog_renderer_device_discontinuities(renderer)
 		if discontinuities != reportedDiscontinuities {
+			trackCounts.discontinuities += discontinuities - reportedDiscontinuities
 			reportedDiscontinuities = discontinuities
 			EngineLog.logger.error("Device sample time jumped by \(cog_renderer_last_device_jump(renderer)) frames (#\(discontinuities)): a cycle the device skipped or repeated")
 		}
 
 		let underruns = cog_renderer_underrun_events(renderer)
 		if underruns != reportedUnderruns {
+			trackCounts.underruns += underruns - reportedUnderruns
 			reportedUnderruns = underruns
-			let rate = output.format.sampleRate
-			let shallowMs = Double(cog_ring_readable(pump.ring)) / rate * 1000
-			let deepMs = (feeder?.bufferedSeconds ?? 0) * 1000
-			EngineLog.logger.error("Underrun #\(underruns): shallow ring \(shallowMs, format: .fixed(precision: 1)) ms, deep ring about \(deepMs, format: .fixed(precision: 0)) ms")
+			let buffered = bufferedSeconds(pump: pump, output: output)
+			EngineLog.logger.error("Underrun #\(underruns): shallow ring \(buffered.shallow * 1000, format: .fixed(precision: 1)) ms, deep ring about \(buffered.deep * 1000, format: .fixed(precision: 0)) ms")
 		}
 
 		heartbeat(pump: pump, renderer: renderer, output: output)
@@ -971,23 +1014,60 @@ import Foundation
 	/// Tells the host what is being heard, whenever any of it changed.
 	private func updateOutputStatus(output: DeviceOutput) {
 		guard let processing = heardProcessing, let track = currentTrack, currentHeard else { return }
+		let gain = ReplayGain.resolve(rgInfo: track.rgInfo)
 		let status = OutputStatus(source: SourceFormat(properties: track.sourceProperties),
 		                          decodesHDCD: track.hdcdDetected && UserDefaults.standard.bool(forKey: "enableHDCD"),
 		                          processing: processing,
 		                          stageModifications: stageModifications(processing),
 		                          trackGain: track.gain,
+		                          gainSource: gain.source,
+		                          gainPeakLimited: gain.peakLimited,
 		                          volume: volumeLevel,
 		                          deviceID: output.deviceID,
 		                          followsSystemDefault: output.followsSystemDefault,
 		                          render: output.format,
 		                          renderFormat: output.renderFormat,
-		                          exclusive: output.isExclusive)
+		                          exclusive: output.isExclusive,
+		                          spatialRendering: outputPlan.spatial ? output.spatialRendering : nil,
+		                          headTracking: outputPlan.spatial && output.headTracking,
+		                          spatialRefused: spatialRefused == output.deviceID,
+		                          bufferFrames: output.bufferFrames,
+		                          latencyFrames: output.latencyFrames)
 		guard status != publishedStatus else { return }
 		publishedStatus = status
 		outputStatusShown = true
+		let formats = DeviceFormats(output)
+		publishedFormats = formats
 		host?.playbackEngineOutputStatusDidChange?(status.userInfo(deviceName: output.deviceName,
-		                                                           virtualFormats: output.streamFormats(physical: false),
-		                                                           physicalFormats: output.streamFormats(physical: true)))
+		                                                           virtualFormats: formats.virtual,
+		                                                           physicalFormats: formats.physical))
+	}
+
+	/// The device's stream formats as last sent. Core Audio may change them
+	/// under us (another app, Audio MIDI Setup), so the heartbeat looks again.
+	private var publishedFormats: DeviceFormats?
+
+	private struct DeviceFormats: Equatable {
+		var virtual: [AudioStreamBasicDescription]
+		var physical: [AudioStreamBasicDescription]
+
+		init(_ output: DeviceOutput) {
+			virtual = output.streamFormats(physical: false)
+			physical = output.streamFormats(physical: true)
+		}
+
+		static func == (lhs: Self, rhs: Self) -> Bool {
+			func bytes(_ formats: [AudioStreamBasicDescription]) -> [UInt8] {
+				formats.flatMap { format in withUnsafeBytes(of: format) { Array($0) } }
+			}
+			return bytes(lhs.virtual) == bytes(rhs.virtual) && bytes(lhs.physical) == bytes(rhs.physical)
+		}
+	}
+
+	/// Sends the status again if the device's formats changed since.
+	private func recheckDeviceFormats(_ output: DeviceOutput) {
+		guard outputStatusShown, let published = publishedFormats, DeviceFormats(output) != published else { return }
+		publishedStatus = nil
 	}
 
 	/// The modifications of the stages that ran and changed the audio, in
@@ -1014,9 +1094,51 @@ import Foundation
 	/// Tells the host nothing is playing any more.
 	private func clearOutputStatus() {
 		publishedStatus = nil
+		publishedFormats = nil
 		guard outputStatusShown else { return }
 		outputStatusShown = false
 		host?.playbackEngineOutputStatusDidChange?(nil)
+	}
+
+	// MARK: - Live metrics
+
+	/// Meters what reaches the device, for `signalMetrics()`. Off, the
+	/// render callback does no metering work.
+	@objc public var meteringEnabled = false {
+		didSet {
+			if let renderer {
+				cog_renderer_set_metering(renderer, meteringEnabled)
+			}
+		}
+	}
+
+	/// What went wrong while the heard track played.
+	private struct TrackCounts {
+		var underruns: UInt64 = 0
+		var discontinuities: UInt64 = 0
+		var clippedSamples: UInt64 = 0
+	}
+	private var trackCounts = TrackCounts()
+
+	/// The output since the last call, and the state of the buffers; nil
+	/// while nothing plays.
+	@objc public func signalMetrics() -> SignalMetrics? {
+		guard let pump, let renderer, let output, currentHeard else { return nil }
+		var snapshot = CogMeterSnapshot()
+		cog_renderer_take_meter(renderer, &snapshot)
+		trackCounts.clippedSamples += snapshot.clippedSamples
+		let buffered = bufferedSeconds(pump: pump, output: output)
+		return SignalMetrics(snapshot: snapshot, channels: output.format.channels, channelConfig: output.format.channelConfig,
+		                     clippedSamples: trackCounts.clippedSamples, underruns: trackCounts.underruns,
+		                     discontinuities: trackCounts.discontinuities,
+		                     shallowBufferSeconds: buffered.shallow, deepBufferSeconds: buffered.deep,
+		                     outputLatencySeconds: Double(output.latencyFrames) / output.format.sampleRate)
+	}
+
+	/// Seconds of audio in the shallow ring (DSP output for the device) and
+	/// the deep one (decoded audio for the DSP thread).
+	private func bufferedSeconds(pump: Pump, output: DeviceOutput) -> (shallow: Double, deep: Double) {
+		(Double(cog_ring_readable(pump.ring)) / output.format.sampleRate, feeder?.bufferedSeconds ?? 0)
 	}
 
 	/// Tells the spectrum and oscilloscope how far behind the device the
@@ -1070,12 +1192,14 @@ import Foundation
 		let elapsed = Double(now - last.time) / 1_000_000_000
 		guard elapsed >= 1 else { return }
 		lastBeat = (now, rendered)
+		recheckDeviceFormats(output)
 		guard output.isRunning else { return }
 		let rate = output.format.sampleRate
 		let pulledMs = Double(rendered - last.rendered) / rate * 1000
 		let shortfallMs = elapsed * 1000 - pulledMs
-		let shallowMs = Double(cog_ring_readable(pump.ring)) / rate * 1000
-		let deepMs = (feeder?.bufferedSeconds ?? 0) * 1000
+		let buffered = bufferedSeconds(pump: pump, output: output)
+		let shallowMs = buffered.shallow * 1000
+		let deepMs = buffered.deep * 1000
 		let message = String(format: "Heartbeat: device pulled %.1f ms in %.1f ms, shallow %.1f ms, deep %.0f ms, underruns %llu; peak out %.3f, gains transport %.3f volume %.3f track %.4f",
 		                     pulledMs, elapsed * 1000, shallowMs, deepMs, cog_renderer_underrun_events(renderer),
 		                     cog_renderer_take_peak(renderer), cog_gain_current(cog_renderer_transport(renderer)),
@@ -1109,6 +1233,7 @@ import Foundation
 			currentTrack = track
 			initialTrack = nil
 			seekPending = false
+			trackCounts = TrackCounts()
 			amountPlayed = offset
 			scrobbleReported = false
 			scrobbleListened = 0
@@ -1223,9 +1348,17 @@ import Foundation
 
 	/// The device or its format changed: rebuild at the current position,
 	/// unless nothing that matters to the render format actually changed.
-	private func deviceChanged(_ change: DeviceOutput.Change) {
+	func deviceChanged(_ change: DeviceOutput.Change) {
 		guard feeder != nil, let output else { return }
 		switch change {
+		case .interrupted:
+			interrupted()
+			return
+		case .interruptionEnded:
+			if resumesAfterInterruption {
+				resume()
+			}
+			return
 		case .format:
 			// A stream's format may have changed under the same render format.
 			publishedStatus = nil

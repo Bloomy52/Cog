@@ -94,7 +94,7 @@ public final class WaveformScanner {
 	/// end. A synthesized format renders what comes before wherever it seeks
 	/// to, so it is read from start to end.
 	private func scan(progress: @escaping (Waveform) -> Void) -> Waveform? {
-		guard url.isFileURL, let first = open() else { return nil }
+		guard WaveformCache.localFile(url) != nil, let first = open() else { return nil }
 
 		var properties: [AnyHashable: Any] = [:]
 		_ = Self.call(url) { properties = first.decoder.properties() ?? [:] }
@@ -112,7 +112,7 @@ public final class WaveformScanner {
 		guard segments > 1 else {
 			read(first, track: track, from: 0, to: nil, into: accumulator, reporter: reporter)
 			close(first)
-			return cancelled.isSet ? nil : accumulator.waveform(final: true)
+			return cancelled.isSet ? nil : accumulator.finalWaveform()
 		}
 
 		let failed = CancellationFlag()
@@ -128,7 +128,13 @@ public final class WaveformScanner {
 				// past it, or failed, would leave a gap.
 				guard reached >= 0, reached <= start + Int(track.rate) / 10 else { return failed.set() }
 			}
-			read(opened, track: track, from: reached, to: end, into: accumulator, reporter: reporter)
+			// A segment that runs out before the next one begins finds the
+			// track shorter than the decoder said, as a file cut short of the
+			// length in its header is: the segments after it seek into
+			// nothing, so it is read from start to end instead.
+			if !read(opened, track: track, from: reached, to: end, into: accumulator, reporter: reporter), end != nil {
+				failed.set()
+			}
 		}
 		guard !cancelled.isSet else { return nil }
 		if failed.isSet {
@@ -139,7 +145,12 @@ public final class WaveformScanner {
 			close(opened)
 			guard !cancelled.isSet else { return nil }
 		}
-		return accumulator.waveform(final: true)
+		return accumulator.finalWaveform()
+	}
+
+	/// After one converted block: next block, no frames left, or the segment's end reached.
+	private enum BlockStep {
+		case next, stop, done
 	}
 
 	/// What the decoder said of the track.
@@ -151,8 +162,9 @@ public final class WaveformScanner {
 
 	/// Decodes from frame `start` (as the decoder counts them) until frame
 	/// `end`, or the end of the track, folding each block to mono into the
-	/// accumulator.
-	private func read(_ opened: Opened, track: Track, from start: Int, to end: Int?, into accumulator: Accumulator, reporter: ProgressReporter) {
+	/// accumulator. False if the decoder ran out first.
+	@discardableResult
+	private func read(_ opened: Opened, track: Track, from start: Int, to end: Int?, into accumulator: Accumulator, reporter: ProgressReporter) -> Bool {
 		let decoder = opened.decoder
 		let converter = ChunkList(maximumDuration: 1.0)
 		var downmix: DownmixProcessor?
@@ -167,63 +179,71 @@ public final class WaveformScanner {
 		while !cancelled.isSet {
 			var chunk: AudioChunk?
 			guard Self.call(url, { chunk = autoreleasepool { decoder.readAudio() } }), let chunk, chunk.frameCount() > 0 else {
-				return
+				return false
 			}
 			chunk.lossless = track.lossless
 			converter.add(chunk)
 			while !converter.isEmpty(), !cancelled.isSet {
-				let floats = converter.removeSamples(asFloat32: 4096)
-				let frames = floats.frameCount()
-				guard frames > 0 else { break }
-				let format = floats.format
-				let channels = Int(format.mChannelsPerFrame)
-				let data = floats.removeSamples(frames)
+				// The block's temporaries (the float chunk, its data) go per block: drained only per readAudio, a
+				// decoder that hands over small chunks piled up the whole track here (hundreds of MB)
+				let step = autoreleasepool { () -> BlockStep in
+					let floats = converter.removeSamples(asFloat32: 4096)
+					let frames = floats.frameCount()
+					guard frames > 0 else { return .stop }
+					let format = floats.format
+					let channels = Int(format.mChannelsPerFrame)
+					let data = floats.removeSamples(frames)
 
-				if framesPerBucket == 0 {
-					let rate = format.mSampleRate
-					let scale = track.rate > 0 ? rate / track.rate : 1
-					position = Double(start) * scale
-					if track.totalFrames > 0 {
-						let total = Double(track.totalFrames) * scale
-						framesPerBucket = accumulator.isProgressive ? total / Double(Waveform.bucketCount) : Double(Self.unknownLengthBlock)
-						stop = end.map { Double($0) * scale } ?? total * 1.01 + rate
+					if framesPerBucket == 0 {
+						let rate = format.mSampleRate
+						let scale = track.rate > 0 ? rate / track.rate : 1
+						position = Double(start) * scale
+						if track.totalFrames > 0 {
+							let total = Double(track.totalFrames) * scale
+							framesPerBucket = accumulator.isProgressive ? total / Double(Waveform.bucketCount) : Double(Self.unknownLengthBlock)
+							stop = end.map { Double($0) * scale } ?? total * 1.01 + rate
+						} else {
+							framesPerBucket = Double(Self.unknownLengthBlock)
+							stop = Self.unknownLengthLimit * rate
+						}
+					}
+
+					if mono.count < frames {
+						mono = [Float](repeating: 0, count: frames)
+					}
+					if channels > 1 {
+						if downmix == nil || downmixFormat.map({ !Self.sameFormat($0, format) }) ?? true {
+							let config = floats.channelConfig != 0 ? floats.channelConfig : AudioChunk.guessChannelConfig(UInt32(channels))
+							downmix = DownmixProcessor(inputFormat: Self.floatFormat(rate: format.mSampleRate, channels: channels), inputConfig: config,
+							                           andOutputFormat: Self.floatFormat(rate: format.mSampleRate, channels: 1), outputConfig: UInt32(AudioChannelFrontCenter))
+							downmixFormat = format
+						}
+						data.withUnsafeBytes { input in
+							mono.withUnsafeMutableBufferPointer { output in
+								downmix?.process(input.baseAddress!, frameCount: frames, output: output.baseAddress!)
+							}
+						}
 					} else {
-						framesPerBucket = Double(Self.unknownLengthBlock)
-						stop = Self.unknownLengthLimit * rate
-					}
-				}
-
-				if mono.count < frames {
-					mono = [Float](repeating: 0, count: frames)
-				}
-				if channels > 1 {
-					if downmix == nil || downmixFormat.map({ !Self.sameFormat($0, format) }) ?? true {
-						let config = floats.channelConfig != 0 ? floats.channelConfig : AudioChunk.guessChannelConfig(UInt32(channels))
-						downmix = DownmixProcessor(inputFormat: Self.floatFormat(rate: format.mSampleRate, channels: channels), inputConfig: config,
-						                           andOutputFormat: Self.floatFormat(rate: format.mSampleRate, channels: 1), outputConfig: UInt32(AudioChannelFrontCenter))
-						downmixFormat = format
-					}
-					data.withUnsafeBytes { input in
-						mono.withUnsafeMutableBufferPointer { output in
-							downmix?.process(input.baseAddress!, frameCount: frames, output: output.baseAddress!)
+						data.withUnsafeBytes { input in
+							mono.withUnsafeMutableBytes { output in
+								output.copyMemory(from: UnsafeRawBufferPointer(rebasing: input.prefix(frames * MemoryLayout<Float>.size)))
+							}
 						}
 					}
-				} else {
-					data.withUnsafeBytes { input in
-						mono.withUnsafeMutableBytes { output in
-							output.copyMemory(from: UnsafeRawBufferPointer(rebasing: input.prefix(frames * MemoryLayout<Float>.size)))
-						}
-					}
-				}
 
-				// Not past the segment's end, which the next segment reads.
-				let counted = min(frames, max(0, Int((stop - position).rounded(.up))))
-				mono.withUnsafeBufferPointer { accumulator.add(UnsafeBufferPointer(rebasing: $0.prefix(counted)), at: Int(position), framesPerBucket: framesPerBucket) }
-				position += Double(frames)
-				reporter.tick()
-				if position >= stop { return }
+					// Not past the segment's end, which the next segment reads.
+					let counted = min(frames, max(0, Int((stop - position).rounded(.up))))
+					mono.withUnsafeBufferPointer { accumulator.add(UnsafeBufferPointer(rebasing: $0.prefix(counted)), at: Int(position), framesPerBucket: framesPerBucket) }
+					position += Double(frames)
+					reporter.tick()
+					if position >= stop { return .done }
+					return .next
+				}
+				if step == .stop { break }
+				if step == .done { return true }
 			}
 		}
+		return false
 	}
 
 	/// Runs a call into the plugins, which may raise an Objective-C
@@ -315,9 +335,26 @@ private final class Accumulator: @unchecked Sendable {
 		}
 	}
 
+	/// The complete waveform, or nil if nothing was read: a decoder that
+	/// failed at once has nothing to show, and should not be cached as a
+	/// flat line.
+	func finalWaveform() -> Waveform? {
+		lock.lock()
+		let read = counts.contains { $0 > 0 }
+		lock.unlock()
+		return read ? waveform(final: true) : nil
+	}
+
+	/// Past the last bucket read, at most this share of the waveform is
+	/// filled in, for a track a little shorter than its stated length; a
+	/// longer stretch, where a file was cut short of its header's length,
+	/// has no sound to show.
+	private static let fillableTail = Waveform.bucketCount / 100
+
 	/// What has been gathered. Final, buckets nothing reached (where a
 	/// segment fell a little short, or the track did) take their
-	/// neighbour's values, so the waveform is whole.
+	/// neighbour's values, so the waveform is whole; a long silent tail is
+	/// left as silence.
 	func waveform(final: Bool) -> Waveform {
 		lock.lock()
 		defer { lock.unlock() }
@@ -331,9 +368,13 @@ private final class Accumulator: @unchecked Sendable {
 				waveform.rms[i] = Float((power[i] / Double(counts[i])).squareRoot())
 				waveform.scanned[i] = true
 			}
-			if final, let firstScanned = waveform.scanned.firstIndex(of: true) {
+			if final, let firstScanned = waveform.scanned.firstIndex(of: true), let lastScanned = waveform.scanned.lastIndex(of: true) {
+				let filled = n - 1 - lastScanned <= Self.fillableTail ? n : lastScanned + 1
 				var source = firstScanned
-				for i in 0..<n {
+				for i in filled..<n {
+					waveform.scanned[i] = true
+				}
+				for i in 0..<filled {
 					if waveform.scanned[i] {
 						source = i
 					} else {

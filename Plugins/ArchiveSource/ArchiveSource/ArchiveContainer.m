@@ -18,8 +18,17 @@ static NSString *path_pack_string(NSString *src) {
 	return [NSString stringWithFormat:@"|%lu|%@|", [src length], src];
 }
 
+static NSString *escape_url_delimiters(NSString *src) {
+	static NSCharacterSet *allowed;
+	static dispatch_once_t once;
+	dispatch_once(&once, ^{
+		allowed = [[NSCharacterSet characterSetWithCharactersInString:@"%#?"] invertedSet];
+	});
+	return [src stringByAddingPercentEncodingWithAllowedCharacters:allowed];
+}
+
 static NSString *g_make_unpack_path(NSString *archive, NSString *file, NSString *name) {
-	return [NSString stringWithFormat:@"unpack://%@%@%@", name, path_pack_string(archive), file];
+	return [NSString stringWithFormat:@"unpack://%@%@%@", name, escape_url_delimiters(path_pack_string(archive)), escape_url_delimiters(file)];
 }
 
 @implementation ArchiveContainer
@@ -63,9 +72,13 @@ static NSString *g_make_unpack_path(NSString *archive, NSString *file, NSString 
 
 	NSMutableArray *files = [NSMutableArray array];
 
+	// Folders skip playlists by default too
+	NSSet *playlistTypes = [NSSet setWithArray:@[@"m3u", @"m3u8", @"pls"]];
+
 	while(!fex_done(fex)) {
 		NSString *name = guess_encoding_of_string(fex_name(fex));
-		if([[NSClassFromString(@"AudioPlayer") fileTypes] containsObject:[[name pathExtension] lowercaseString]])
+		NSString *type = [[name pathExtension] lowercaseString];
+		if(![playlistTypes containsObject:type] && [[NSClassFromString(@"AudioPlayer") fileTypes] containsObject:type])
 			[files addObject:[NSURL URLWithDataRepresentation:[g_make_unpack_path([url path], name, @"fex") dataUsingEncoding:NSUTF8StringEncoding] relativeToURL:nil]];
 		fex_next(fex);
 	}

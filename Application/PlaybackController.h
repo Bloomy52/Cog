@@ -49,9 +49,6 @@ extern NSDictionary *makeRGInfo(PlaylistEntry *pe);
 	IBOutlet NSSlider *volumeSlider;
 	IBOutlet NSSlider *miniVolumeSlider;
 	IBOutlet NSSlider *miniPlusVolumeSlider;
-	IBOutlet NSSlider *pitchSlider;
-	IBOutlet NSSlider *tempoSlider;
-	IBOutlet NSButton *lockButton;
 
 	IBOutlet NSArrayController *outputDevices;
 
@@ -68,6 +65,8 @@ extern NSDictionary *makeRGInfo(PlaylistEntry *pe);
 	// progress bar display
 	NSProgress *progressOverall;
 	NSProgress *progressJob;
+	// tags loading in the background, apart from the above
+	NSProgress *progressMetadata;
 
 	void *_eq;
 }
@@ -76,6 +75,11 @@ extern NSDictionary *makeRGInfo(PlaylistEntry *pe);
 
 @property NSProgress *progressOverall;
 @property NSProgress *progressJob;
+@property NSProgress *progressMetadata;
+
+// The player, for what it reports beyond playback (the Signal Inspector's
+// meters).
+- (AudioPlayer *)audioPlayer;
 
 - (IBAction)changeVolume:(id)sender;
 - (IBAction)volumeDown:(id)sender;
@@ -85,11 +89,8 @@ extern NSDictionary *makeRGInfo(PlaylistEntry *pe);
 - (double)volume;
 - (void)setVolume:(double)volume;
 
-- (IBAction)changePitch:(id)sender;
 - (IBAction)pitchDown:(id)sender;
 - (IBAction)pitchUp:(id)sender;
-
-- (IBAction)changeTempo:(id)sender;
 
 // The speed engine resamples, so pitch follows tempo and the lock means nothing.
 + (BOOL)isVarispeed;

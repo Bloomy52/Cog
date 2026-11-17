@@ -9,6 +9,7 @@
 #import "VolumeSlider.h"
 #import "CogAudio/Helper.h"
 #import "PlaybackController.h"
+#import "TrackingSlider.h"
 
 static void *kVolumeSliderContext = &kVolumeSliderContext;
 
@@ -40,21 +41,41 @@ static void *kVolumeSliderContext = &kVolumeSliderContext;
 	MAX_VOLUME = (volumeLimit) ? 100.0 : 800.0;
 
 	wasInsideSnapRange = NO;
-	textView = [NSText new];
-	[textView setFrame:NSMakeRect(0, 0, 50, 20)];
-	textView.drawsBackground = NO;
-	textView.editable = NO;
+	// A label centred in a view of a set size. An NSText sized itself to its
+	// line of text, and the popover then held it low in the bubble.
+	textView = [NSTextField labelWithString:@""];
 	textView.alignment = NSTextAlignmentCenter;
+	// Even digits keep the text still as the value changes.
+	textView.font = [NSFont monospacedDigitSystemFontOfSize:12 weight:NSFontWeightRegular];
+	textView.translatesAutoresizingMaskIntoConstraints = NO;
+
+	NSView *contentView = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 50, 20)];
+	[contentView addSubview:textView];
+	[NSLayoutConstraint activateConstraints:@[
+		[textView.leadingAnchor constraintEqualToAnchor:contentView.leadingAnchor],
+		[textView.trailingAnchor constraintEqualToAnchor:contentView.trailingAnchor],
+		[textView.centerYAnchor constraintEqualToAnchor:contentView.centerYAnchor],
+	]];
 
 	NSViewController *viewController = [NSViewController new];
-	viewController.view = textView;
+	viewController.view = contentView;
 
 	popover = [NSPopover new];
 	popover.contentViewController = viewController;
-	// Don't hide the popover automatically.
-	popover.behavior = NSPopoverBehaviorTransient;
+	// Hidden on a timer. Transient, before macOS 26, the click that closed it
+	// was sometimes dropped, so a click on the slider while it showed did
+	// nothing.
+	popover.behavior = NSPopoverBehaviorApplicationDefined;
 	popover.animates = NO;
-	[popover setContentSize:textView.bounds.size];
+	[popover setContentSize:contentView.bounds.size];
+
+	// The toolbar sizes the item by the slider's constraints, and a slider has
+	// no width of its own: on macOS 15 it was squeezed to just its knob.
+	// With a minimum, the toolbar moves it to its overflow menu instead.
+	[[self.widthAnchor constraintGreaterThanOrEqualToConstant:64] setActive:YES];
+	NSLayoutConstraint *preferredWidth = [self.widthAnchor constraintEqualToConstant:96];
+	preferredWidth.priority = NSLayoutPriorityDefaultLow;
+	preferredWidth.active = YES;
 
 	[[NSUserDefaultsController sharedUserDefaultsController] addObserver:self forKeyPath:@"values.volumeLimit" options:0 context:kVolumeSliderContext];
 	observersadded = YES;
@@ -67,7 +88,7 @@ static void *kVolumeSliderContext = &kVolumeSliderContext;
 }
 
 - (void)updateToolTip {
-	[textView setString:[NSString stringWithFormat:@"%.0lf%%", round([self displayedVolume])]];
+	textView.stringValue = [NSString stringWithFormat:@"%.0lf%%", round([self displayedVolume])];
 }
 
 - (double)displayedVolume {
@@ -91,9 +112,12 @@ static void *kVolumeSliderContext = &kVolumeSliderContext;
 	double range = self.maxValue - self.minValue;
 	double progress = range == 0 ? 0 : ([self doubleValue] - self.minValue) / range;
 	CGFloat knobCenter = self.knobThickness / 2.f + (self.bounds.size.width - self.knobThickness) * progress;
-	NSRect anchor = NSMakeRect(knobCenter - 1, NSMidY(self.bounds) - 1, 2, 2);
+	// From the slider's edge, not the knob's middle, so it covers less of
+	// the knob, and it lets clicks through to what it does cover.
+	NSRect anchor = NSMakeRect(knobCenter - 1, NSMinY(self.bounds), 2, NSHeight(self.bounds));
 
 	[popover showRelativeToRect:anchor ofView:self preferredEdge:NSRectEdgeMaxY];
+	popover.contentViewController.view.window.ignoresMouseEvents = YES;
 	[self.window.parentWindow makeKeyWindow];
 }
 
@@ -107,6 +131,7 @@ static void *kVolumeSliderContext = &kVolumeSliderContext;
 	[self updateToolTip];
 
 	[popover showRelativeToRect:view.bounds ofView:view preferredEdge:NSRectEdgeMaxY];
+	popover.contentViewController.view.window.ignoresMouseEvents = YES;
 
 	[self hideToolTipAfterDelay:duration];
 }
@@ -168,6 +193,16 @@ static void *kVolumeSliderContext = &kVolumeSliderContext;
 	[self showToolTip];
 
 	return [super sendAction:theAction to:theTarget];
+}
+
+- (void)mouseDown:(NSEvent *)event {
+	// Keep the tooltip up while the knob moves, and for a moment after.
+	[self hideToolTipAfterDelay:0];
+	if([self trackPointerFromEvent:event]) {
+		[self hideToolTipAfterDelay:1.0];
+	} else {
+		[super mouseDown:event];
+	}
 }
 
 - (void)scrollWheel:(NSEvent *)theEvent {

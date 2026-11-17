@@ -16,8 +16,10 @@ import Foundation
 /// - failure: a minute, in memory only, never written to the store.
 ///
 /// Requests go out one at a time, and a question already in flight is not
-/// asked twice. Everything here runs on the main actor, which is where the
-/// rest of the app uses the persistent container's view context.
+/// asked twice. When the server sends `Retry-After`, nothing goes out until
+/// that time has passed; tracks asked about meanwhile count as failures.
+/// Everything here runs on the main actor, which is where the rest of the app
+/// uses the persistent container's view context.
 @MainActor
 @objc(CogLyricsLookup)
 final class LyricsLookup: NSObject {
@@ -44,6 +46,8 @@ final class LyricsLookup: NSObject {
 	private var waiting: [String: [(String) -> Void]] = [:]
 	private var tail: Task<Void, Never>?
 	private var client = LrclibClient()
+	/// When the server's `Retry-After` runs out. In memory only.
+	private var holdUntil: Date?
 
 	@objc var isEnabled: Bool {
 		UserDefaults.standard.bool(forKey: Self.enabledKey)
@@ -51,7 +55,8 @@ final class LyricsLookup: NSObject {
 
 	// MARK: - Entry point for the lyrics window
 
-	/// The text to show for a track without lyrics of its own.
+	/// The text to show for a track without lyrics of its own: LRC where
+	/// LRCLIB has it timed.
 	///
 	/// Returns nil when LRCLIB is off or the track can't be asked about (no
 	/// artist or title). Otherwise returns either the final text, or a
@@ -80,6 +85,7 @@ final class LyricsLookup: NSObject {
 			// rows, which are replaced as they are asked again.
 			client = LrclibClient(root: root, session: client.session)
 			memory.removeAll()
+			holdUntil = nil
 		}
 	}
 
@@ -182,6 +188,9 @@ final class LyricsLookup: NSObject {
 			await previous?.value
 			let outcome: Outcome
 			do {
+				if self?.isHolding == true {
+					throw LrclibError.deferred
+				}
 				outcome = .answer(try await client.get(query))
 			} catch let error as LrclibError {
 				outcome = .failure(error)
@@ -192,9 +201,17 @@ final class LyricsLookup: NSObject {
 		}
 	}
 
+	private var isHolding: Bool {
+		guard let holdUntil else { return false }
+		return Date() < holdUntil
+	}
+
 	private func deliver(_ outcome: Outcome, for key: String) {
 		let now = Date()
 		remember(Remembered(outcome: outcome, at: now), for: key)
+		if case let .failure(.transient(_, retryAfter?)) = outcome {
+			holdUntil = now.addingTimeInterval(retryAfter)
+		}
 		if case let .answer(answer) = outcome {
 			store(answer, for: key, at: now)
 		}
@@ -209,38 +226,15 @@ final class LyricsLookup: NSObject {
 	private static func text(for outcome: Outcome) -> String {
 		switch outcome {
 		case let .answer(.found(plain, synced)):
-			return plain.isEmpty ? unsynced(synced) : plain
+			return synced.isEmpty ? plain : synced
 		case .answer(.instrumental):
 			return NSLocalizedString("LRCLIB lists this track as instrumental.", comment: "Lyrics window: LRCLIB says the track has no words")
 		case .answer(.notFound):
 			return NSLocalizedString("LRCLIB has no lyrics for this track.", comment: "Lyrics window: LRCLIB has no record for the track")
-		case .failure(.transport), .failure(.transient):
+		case .failure(.transport), .failure(.transient), .failure(.deferred):
 			return NSLocalizedString("Could not reach LRCLIB.", comment: "Lyrics window: LRCLIB is unreachable or busy")
 		case .failure:
 			return NSLocalizedString("LRCLIB could not answer for this track.", comment: "Lyrics window: LRCLIB returned an error")
 		}
-	}
-
-	/// Plain text from LRC: timestamps dropped, header tags such as `[ar:…]`
-	/// removed, blank lines kept as stanza breaks.
-	static func unsynced(_ lrc: String) -> String {
-		let timestamp = try! NSRegularExpression(pattern: #"\[\d+:\d+(?:[.:]\d+)?\]"#)
-		let header = try! NSRegularExpression(pattern: #"^\s*\[[A-Za-z#]+:[^\]]*\]\s*$"#)
-		var lines: [String] = []
-		lrc.enumerateLines { line, _ in
-			let range = NSRange(line.startIndex..., in: line)
-			if header.firstMatch(in: line, range: range) != nil {
-				return
-			}
-			let text = timestamp.stringByReplacingMatches(in: line, range: range, withTemplate: "")
-			lines.append(text.trimmingCharacters(in: .whitespaces))
-		}
-		while lines.first?.isEmpty == true {
-			lines.removeFirst()
-		}
-		while lines.last?.isEmpty == true {
-			lines.removeLast()
-		}
-		return lines.joined(separator: "\n")
 	}
 }

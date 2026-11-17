@@ -137,7 +137,7 @@ static AppController *kAppController = nil;
 			          NSDictionary *loadEntryData = @{@"entries": [p URLs],
 				                                      @"sort": @YES,
 				                                      @"origin": @(URLOriginExternal)};
-			          [self->playlistController performSelectorInBackground:@selector(addURLsInBackground:) withObject:loadEntryData];
+			          [self->playlistController addURLsInBackground:loadEntryData];
 		          } else {
 			          [p close];
 		          }
@@ -186,7 +186,7 @@ static AppController *kAppController = nil;
 		NSDictionary *loadEntriesData = @{ @"entries": @[[panel url]],
 			                               @"sort": @NO,
 			                               @"origin": @(URLOriginExternal) };
-		[playlistController performSelectorInBackground:@selector(addURLsInBackground:) withObject:loadEntriesData];
+		[playlistController addURLsInBackground:loadEntriesData];
 	}
 }
 
@@ -233,12 +233,16 @@ static BOOL consentLastEnabled = NO;
 		NSView *playlistRoot = mainWindow.contentView;
 		mainWindow.contentView = [NSView new];
 
+		// Tabs for the playlists, above the one shown.
+		[PlaylistTabBar installInStackView:(NSStackView *)playlistRoot controller:playlistController];
+
 		NSViewController *contentViewController = [NSViewController new];
 		contentViewController.view = playlistRoot;
 
 		mainSplitViewController = [MainSplitViewController new];
+		// Panes dock around the playlist, inside the content beside the sidebar.
 		[mainSplitViewController setupWithSidebarViewController:fileTreeViewController
-		                                  contentViewController:contentViewController];
+		                                  contentViewController:[[PaneManager shared] dockViewControllerWithCenter:contentViewController]];
 		// Required alongside allowsFullHeightLayout for the full-height sidebar look
 		mainWindow.styleMask |= NSWindowStyleMaskFullSizeContentView;
 		mainWindow.contentViewController = mainSplitViewController;
@@ -322,11 +326,13 @@ static BOOL consentLastEnabled = NO;
 
 		if(results && [results count] > 0) {
 			PlaylistEntry *pe = results[0];
-			// Select this track
-			[playlistView selectRowIndexes:[NSIndexSet indexSetWithIndex:pe.index] byExtendingSelection:NO];
+			// Show its playlist and select this track
+			if(pe.playlist) [playlistController showPlaylist:pe.playlist];
+			NSInteger row = [playlistController rowForEntry:pe];
+			if(row != NSNotFound) [playlistView selectRowIndexes:[NSIndexSet indexSetWithIndex:row] byExtendingSelection:NO];
 			if(resumePlaybackOnStartup) {
 				// And play it
-				[playbackController playEntryAtIndex:pe.index startPaused:(lastStatus == CogStatusPaused) andSeekTo:@(pe.currentPosition)];
+				[playbackController playEntry:pe startPaused:(lastStatus == CogStatusPaused) andSeekTo:@(pe.currentPosition)];
 			} else {
 				// Startup resume is disabled, so clear stale "currently playing" markers from the last run.
 				for(PlaylistEntry *entry in results) {
@@ -449,14 +455,23 @@ static BOOL consentLastEnabled = NO;
 					// And now to set up user feedback prompting
 					options.onLastRunStatusDetermined = ^void(enum SentryLastRunStatus status, SentryEvent * _Nullable event) {
 						if(status == SentryLastRunStatusDidCrash && event) {
-							// capture user feedback
-							FeedbackController *fbcon = [FeedbackController new];
-							[fbcon performSelectorOnMainThread:@selector(showWindow:) withObject:nil waitUntilDone:YES];
-							if([fbcon waitForCompletion]) {
-								SentryFeedback *feedback = [[SentryFeedback alloc] initWithMessage:[fbcon comments] name:[fbcon name] email:[fbcon email] source:SentryFeedbackSourceCustom associatedEventId:event.eventId attachments:nil];
+							// capture user feedback, once launch is done: this can run on
+							// the main thread during launch, where waiting for an answer
+							// froze the app before its window could take one.
+							SentryId *eventId = event.eventId;
+							dispatch_async(dispatch_get_main_queue(), ^{
+								// Kept until it answers, by its own handler.
+								__block FeedbackController *fbcon = [FeedbackController new];
+								fbcon.completionHandler = ^(BOOL sent) {
+									if(sent) {
+										SentryFeedback *feedback = [[SentryFeedback alloc] initWithMessage:[fbcon comments] name:[fbcon name] email:[fbcon email] source:SentryFeedbackSourceCustom associatedEventId:eventId attachments:nil];
 
-								[SentrySDK captureFeedback:feedback];
-							}
+										[SentrySDK captureFeedback:feedback];
+									}
+									fbcon = nil;
+								};
+								[fbcon showWindow:nil];
+							});
 						}
 					};
 				}];
@@ -477,9 +492,9 @@ static BOOL consentLastEnabled = NO;
 			mainWindow.subtitle = @"";
 
 			self.infoButton.imageScaling = NSImageScaleNone;
-			self.infoButton.image = [NSImage imageNamed:@"infoTemplate"];
+			self.infoButton.image = [NSImage imageWithSystemSymbolName:@"info.circle" accessibilityDescription:nil];
 			self.infoButtonMini.imageScaling = NSImageScaleNone;
-			self.infoButtonMini.image = [NSImage imageNamed:@"infoTemplate"];
+			self.infoButtonMini.image = [NSImage imageWithSystemSymbolName:@"info.circle" accessibilityDescription:nil];
 		}
 
 		if(entry.albumArt) {
@@ -490,7 +505,6 @@ static BOOL consentLastEnabled = NO;
 			const CGFloat sizeX = 16.0;
 			const CGFloat sizeY = 16.0;
 
-			NSImage *newButtonImage = [[NSImage alloc] initWithSize:NSMakeSize(sizeX, sizeY)];
 			NSSize artSize = entry.albumArt.size;
 			CGFloat maxDim = MAX(artSize.width, artSize.height);
 			CGFloat ratioX = artSize.width / maxDim;
@@ -500,12 +514,32 @@ static BOOL consentLastEnabled = NO;
 			posX = posX * sizeX / maxDim;
 			posY = posY * sizeY / maxDim;
 
-			[newButtonImage lockFocus];
+			// Into an 8-bit sRGB bitmap at twice the size, not lockFocus's
+			// buffer in the display's colour space: sharp on Retina, and no
+			// colour out of range for the grey the toolbar turns it in an
+			// inactive window, where bright parts of some covers came out
+			// speckled on macOS 15.
+			NSBitmapImageRep *rep = [[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+			                                                                 pixelsWide:(NSInteger)(sizeX * 2)
+			                                                                 pixelsHigh:(NSInteger)(sizeY * 2)
+			                                                              bitsPerSample:8
+			                                                            samplesPerPixel:4
+			                                                                   hasAlpha:YES
+			                                                                   isPlanar:NO
+			                                                             colorSpaceName:NSDeviceRGBColorSpace
+			                                                                bytesPerRow:0
+			                                                               bitsPerPixel:0] bitmapImageRepByRetaggingWithColorSpace:[NSColorSpace sRGBColorSpace]];
+			rep.size = NSMakeSize(sizeX, sizeY);
+			[NSGraphicsContext saveGraphicsState];
+			NSGraphicsContext.currentContext = [NSGraphicsContext graphicsContextWithBitmapImageRep:rep];
+			NSGraphicsContext.currentContext.imageInterpolation = NSImageInterpolationHigh;
 			[entry.albumArt drawInRect:NSMakeRect(posX, posY, sizeX * ratioX, sizeY * ratioY)
 							  fromRect:NSMakeRect(0, 0, artSize.width, artSize.height)
 							 operation:NSCompositingOperationSourceOver
 							  fraction:1.0];
-			[newButtonImage unlockFocus];
+			[NSGraphicsContext restoreGraphicsState];
+			NSImage *newButtonImage = [[NSImage alloc] initWithSize:NSMakeSize(sizeX, sizeY)];
+			[newButtonImage addRepresentation:rep];
 
 			self.infoButton.imageScaling = NSImageScaleProportionallyUpOrDown;
 			self.infoButton.image = newButtonImage;
@@ -513,9 +547,9 @@ static BOOL consentLastEnabled = NO;
 			self.infoButtonMini.image = newButtonImage;
 		} else {
 			self.infoButton.imageScaling = NSImageScaleNone;
-			self.infoButton.image = [NSImage imageNamed:@"infoTemplate"];
+			self.infoButton.image = [NSImage imageWithSystemSymbolName:@"info.circle" accessibilityDescription:nil];
 			self.infoButtonMini.imageScaling = NSImageScaleNone;
-			self.infoButtonMini.image = [NSImage imageNamed:@"infoTemplate"];
+			self.infoButtonMini.image = [NSImage imageWithSystemSymbolName:@"info.circle" accessibilityDescription:nil];
 		}
 
 		{
@@ -605,7 +639,7 @@ static BOOL consentLastEnabled = NO;
 	BOOL resetPlaylistOnQuit = [[NSUserDefaults standardUserDefaults] boolForKey:@"resetPlaylistOnQuit"];
 
 	if (resetPlaylistOnQuit) {
-		NSArray *entities = @[@"PlaylistEntry", @"AlbumArtwork"];
+		NSArray *entities = @[@"PlaylistEntry", @"Playlist", @"AlbumArtwork"];
 		for (NSString *entityName in entities) {
 			NSFetchRequest *request = [NSFetchRequest fetchRequestWithEntityName:entityName];
 			NSError *error = nil;
@@ -618,7 +652,9 @@ static BOOL consentLastEnabled = NO;
 		}
 	} else {
 		// How the heck are people getting this in their playlists
-		for(PlaylistEntry *pe in playlistController.arrangedObjects) {
+		// Every playlist's entries, not only the one shown, keep their art.
+		NSArray *allEntries = [moc executeFetchRequest:[NSFetchRequest fetchRequestWithEntityName:@"PlaylistEntry"] error:nil];
+		for(PlaylistEntry *pe in allEntries) {
 			if(pe.deLeted || !pe.urlString || [pe.urlString isEqualToString:@""] || !pe.url) {
 				[moc deleteObject:pe];
 				continue;
@@ -679,7 +715,7 @@ static BOOL consentLastEnabled = NO;
 	NSDictionary *loadEntriesData = @{ @"entries": urls,
 		                               @"sort": @NO,
 		                               @"origin": @(URLOriginExternal) };
-	[playlistController performSelectorInBackground:@selector(addURLsInBackground:) withObject:loadEntriesData];
+	[playlistController addURLsInBackground:loadEntriesData];
 	return YES;
 }
 
@@ -725,7 +761,7 @@ static BOOL consentLastEnabled = NO;
 		                               @"sort": @YES,
 		                               @"origin": @(URLOriginExternal) };
 
-	[playlistController performSelectorInBackground:@selector(addURLsInBackground:) withObject:loadEntriesData];
+	[playlistController addURLsInBackground:loadEntriesData];
 
 	[theApplication replyToOpenOrPrint:NSApplicationDelegateReplySuccess];
 }
@@ -850,6 +886,9 @@ static BOOL consentLastEnabled = NO;
 	[userDefaultsValuesDict setObject:@NO forKey:@"enableLrclib"];
 	[userDefaultsValuesDict setObject:@"https://lrclib.net" forKey:@"lrclibUrl"];
 
+	// What shows a track's info follows "playback" or "selection".
+	[userDefaultsValuesDict setObject:@"playback" forKey:@"trackInfoSource"];
+
 	[userDefaultsValuesDict setObject:@NO forKey:@"spectrumFreqMode"];
 	[userDefaultsValuesDict setObject:@YES forKey:@"spectrumProjectionMode"];
 
@@ -862,6 +901,24 @@ static BOOL consentLastEnabled = NO;
 	[userDefaultsValuesDict setObject:barColor forKey:@"spectrumBarColor"];
 	[userDefaultsValuesDict setObject:dotColor forKey:@"spectrumDotColor"];
 
+	// The projectM pane's.
+	[userDefaultsValuesDict setObject:@YES forKey:@"projectMShuffle"];
+	[userDefaultsValuesDict setObject:@30.0 forKey:@"projectMPresetDuration"];
+	[userDefaultsValuesDict setObject:@"" forKey:@"projectMPresetFolder"];
+	[userDefaultsValuesDict setObject:@NO forKey:@"projectMSeizureWarningSuppressed"];
+	[userDefaultsValuesDict setObject:@3.0 forKey:@"projectMCrossfade"];
+	[userDefaultsValuesDict setObject:@NO forKey:@"projectMHardCuts"];
+	[userDefaultsValuesDict setObject:@2.0 forKey:@"projectMHardCutThreshold"];
+	[userDefaultsValuesDict setObject:@1 forKey:@"projectMDetail"];
+	[userDefaultsValuesDict setObject:@1 forKey:@"projectMResolution"];
+	[userDefaultsValuesDict setObject:@30 forKey:@"projectMFrameRate"];
+	[userDefaultsValuesDict setObject:@[] forKey:@"projectMExcludedThemes"];
+	[userDefaultsValuesDict setObject:@NO forKey:@"projectMPresetLocked"];
+
+	// The waveform visualizer's; the waveform* keys below are the seek bar's.
+	[userDefaultsValuesDict setObject:barColor forKey:@"waveformVisualizerColor"];
+	[userDefaultsValuesDict setObject:@"oscilloscope" forKey:@"waveformVisualizerMode"];
+
 	[userDefaultsValuesDict setObject:@YES forKey:@"waveformSeekBar"];
 	[userDefaultsValuesDict setObject:@NO forKey:@"waveformLogScale"];
 	[userDefaultsValuesDict setObject:@YES forKey:@"waveformRectified"];
@@ -872,6 +929,10 @@ static BOOL consentLastEnabled = NO;
 	[userDefaultsValuesDict setObject:@(44100) forKey:@"synthSampleRate"];
 
 	[userDefaultsValuesDict setObject:@NO forKey:@"alwaysStopAfterCurrent"];
+	// Off: once the queue empties, play on after its last track, in that
+	// track's playlist.
+	[userDefaultsValuesDict setObject:@NO forKey:@"stopWhenQueueEmpties"];
+	[userDefaultsValuesDict setObject:@YES forKey:@"showPlaylistTabs"];
 	[userDefaultsValuesDict setObject:@NO forKey:@"selectionFollowsPlayback"];
 
 	[userDefaultsValuesDict setObject:@YES forKey:@"suspendOutputOnPause"];
@@ -1083,6 +1144,10 @@ static NSDictionary *shortcutDefaults = nil;
 	[self changeFontSize:-1];
 }
 
+- (IBAction)resetPaneLayout:(id)sender {
+	[[PaneManager shared] resetLayout];
+}
+
 - (IBAction)toggleMiniMode:(id)sender {
 	[self setMiniMode:(!miniMode)];
 }
@@ -1199,8 +1264,11 @@ static NSDictionary *shortcutDefaults = nil;
 
 - (void)selectTrack:(id)sender {
 	PlaylistEntry *pe = (PlaylistEntry *)sender;
+	// Only in the playlist shown; another's entries have no row.
+	NSInteger row = [playlistController rowForEntry:pe];
+	if(row == NSNotFound) return;
 	@try {
-		[playlistView selectRowIndexes:[NSIndexSet indexSetWithIndex:pe.index] byExtendingSelection:NO];
+		[playlistView selectRowIndexes:[NSIndexSet indexSetWithIndex:row] byExtendingSelection:NO];
 	}
 	@catch(NSException *e) {
 	}

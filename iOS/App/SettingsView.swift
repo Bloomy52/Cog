@@ -14,12 +14,15 @@ struct SettingsView: View {
 	@AppStorage("enableFading") private var fading = true
 	@AppStorage("volumeScaling") private var replayGain = "albumGainWithPeak"
 	@AppStorage("alwaysStopAfterCurrent") private var stopAfterEach = false
+	@AppStorage("stopWhenQueueEmpties") private var stopWhenQueueEmpties = false
 	@AppStorage("enableSpatialAudio") private var spatialAudio = false
 	@AppStorage("enableHeadTracking") private var headTracking = false
 	@AppStorage("enableLrclib") private var lrclib = false
 	@AppStorage(WaveformModel.enabledKey) private var showWaveform = true
 	@AppStorage(WaveformModel.logScaleKey) private var waveformLogScale = false
 	@AppStorage(WaveformModel.rectifiedKey) private var waveformRectified = true
+	@AppStorage("nowPlayingAlwaysDark") private var nowPlayingAlwaysDark = false
+	@AppStorage("waveformVisualizerMode") private var waveformVisualizerMode = WaveformView.Mode.oscilloscope
 
 	var body: some View {
 		NavigationStack {
@@ -36,6 +39,7 @@ struct SettingsView: View {
 				Section("Playback") {
 					Toggle("Fade on Pause and Seek", isOn: $fading)
 					Toggle("Stop After Each Track", isOn: $stopAfterEach)
+					Toggle("Stop When the Queue Empties", isOn: $stopWhenQueueEmpties)
 					NavigationLink("MIDI") { MIDISettingsView() }
 				}
 				Section {
@@ -48,6 +52,26 @@ struct SettingsView: View {
 					Text("Seek Bar")
 				} footer: {
 					Text("The track's loudness, drawn as the seek bar.")
+				}
+				Section {
+					Toggle("Always Dark", isOn: $nowPlayingAlwaysDark)
+				} header: {
+					Text("Now Playing")
+				} footer: {
+					Text("Tracks without album art play in dark colors too, as tracks with art do in the album's.")
+				}
+				Section {
+					VisualizerColorPicker("Spectrum Bars", color: .spectrumBars)
+					VisualizerColorPicker("Spectrum Peaks", color: .spectrumPeaks)
+					VisualizerColorPicker("Waveform", color: .waveform)
+					Picker("Waveform Style", selection: $waveformVisualizerMode) {
+						Text("Oscilloscope").tag(WaveformView.Mode.oscilloscope)
+						Text("Envelope").tag(WaveformView.Mode.envelope)
+					}
+				} header: {
+					Text("Visualizer")
+				} footer: {
+					Text("The oscilloscope traces the moment playing; the envelope, the last few seconds. Tap the waveform in Now Playing to switch.")
 				}
 				Section {
 					Picker("ReplayGain", selection: $replayGain) {

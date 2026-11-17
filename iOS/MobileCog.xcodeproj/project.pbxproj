@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		00B92830111F354B2239AE48 /* VGMContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = 8B52983244264E94BAAA6691 /* VGMContainer.m */; settings = {COMPILER_FLAGS = "-DVGM_USE_ATRAC9 -DVGM_USE_FFMPEG -DVGM_USE_G719 -DVGM_USE_G7221 -DVGM_USE_MPEG -DVGM_USE_VORBIS -D__MACOSX__"; }; };
+		015FFDDEC0B1AA6F22CD8E97 /* VUMeterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E6832858CBCBE4960E6F31 /* VUMeterView.swift */; };
 		047936E2A7D9B145CBD7CD44 /* CueSheetMetadataReader.m in Sources */ = {isa = PBXBuildFile; fileRef = DE5702BF0CCFC1557C2F85B5 /* CueSheetMetadataReader.m */; };
 		056433AE28170C5044BE271A /* Syntrax_c.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 13F1B0575A12665BAE01AAAC /* Syntrax_c.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		062940EF34A69E986610B412 /* HighlyQuixotic.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B6C40369FED30EEB66982F3D /* HighlyQuixotic.framework */; };
@@ -40,6 +41,7 @@
 		2A090A7FB29F457F50515C5A /* HivelyPlayer.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 532C99773A73F4B0A63DB0A3 /* HivelyPlayer.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2CD6DD50F641FDF9EC8A37FC /* HLSMemorySource.m in Sources */ = {isa = PBXBuildFile; fileRef = BF27B2F8D72FC2A16E0EB2A8 /* HLSMemorySource.m */; };
 		3068B3435515F79CF9B5C33D /* MIDIContainer.mm in Sources */ = {isa = PBXBuildFile; fileRef = B29F7CEB74A50703629F0CF4 /* MIDIContainer.mm */; };
+		31D0E047A6A92AFAB47913BA /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A296A233F25B5BC7CB708962 /* WaveformView.swift */; };
 		3209B7B5D3E8600D7C4E5046 /* libavformat.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 257DDCB0DE45D16012EFFB48 /* libavformat.xcframework */; };
 		32265ADFA70E9D215E25AB5C /* libbinio.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 17DBE81FD376DEE61A07E401 /* libbinio.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		325350F8EF006BF49FF2AC8C /* CogAudio.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 843D758B5E3FD2015CBD376D /* CogAudio.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -59,6 +61,7 @@
 		3F48E4C939BAAE31122BABAA /* SidDecoder.mm in Sources */ = {isa = PBXBuildFile; fileRef = D5EC8EF46E0D8E8D4E34543B /* SidDecoder.mm */; };
 		3F860854465B9CD43B175049 /* libfdk-aac.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E645023FA3DDE611F15C07E7 /* libfdk-aac.xcframework */; };
 		402C04ECAB265B8C9D828C8A /* sidplayfp.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BB821A988F522F49086C420E /* sidplayfp.framework */; };
+		44F439990135AAE534EBCEC5 /* SpectrumView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0370650B61067CFC89A424D /* SpectrumView.swift */; };
 		4679C83C35D5CF82C7EBB503 /* SidMetadataReader.mm in Sources */ = {isa = PBXBuildFile; fileRef = CB96A5BAE8525021B1DEB4DD /* SidMetadataReader.mm */; };
 		473B65903619C7E9B4DF1E8C /* libopus.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9589F8429AC738EFB618FA3E /* libopus.xcframework */; };
 		48425FFBE7EB53E2878E8481 /* FileSource.m in Sources */ = {isa = PBXBuildFile; fileRef = 7D59C40E79B719FEE54AFFC5 /* FileSource.m */; };
@@ -70,10 +73,10 @@
 		50422BFAAA0E6F6A3162E91F /* CogPlugins.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 681B3E839D0E192A690222C4 /* CogPlugins.framework */; };
 		506553DEED31340DD80A55A0 /* OMPTContainer.mm in Sources */ = {isa = PBXBuildFile; fileRef = 3550EC25063BC459CE3B0111 /* OMPTContainer.mm */; };
 		53611AF983DD4519694107C3 /* CoreMIDI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 46D6405F3B78DFF490955EAD /* CoreMIDI.framework */; };
+		5425F638539669076211EE53 /* LyricsText.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB555EB4EAC3737FD50CC73A /* LyricsText.swift */; };
 		5545ED0AC47A2972717A9605 /* CogPlugins.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 681B3E839D0E192A690222C4 /* CogPlugins.framework */; };
 		585BE524744AFAB5FD34DCF9 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 644D14A6CEF05A0105659361 /* AVFoundation.framework */; };
 		5A9C27394F0683FEAD24F5C5 /* HighlyTheoretical.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 1C32C67824BCD18B24D97BCD /* HighlyTheoretical.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		5B327CCF52E49AC10AFB6BE4 /* libatrac9.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 88A9217A5191C8D98C945FA6 /* libatrac9.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		5BEDF2988DE8ED6C34FFB835 /* MIDIDecoder.mm in Sources */ = {isa = PBXBuildFile; fileRef = 1A90C8DB442E8F8748320BA0 /* MIDIDecoder.mm */; };
 		60D2BED0F70AC35F115C3C66 /* snes9x.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 9A39802592B4BBF39E7CE605 /* snes9x.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		62FA14D70EA67B712C0A67AC /* fx9b.pxt in Resources */ = {isa = PBXBuildFile; fileRef = EE08B849427D06EAB8707702 /* fx9b.pxt */; };
@@ -128,6 +131,7 @@
 		A5D06CBB9D73BCB2CA2A06CB /* VorbisDecoder.m in Sources */ = {isa = PBXBuildFile; fileRef = 02325170602DA2B4E80294AA /* VorbisDecoder.m */; };
 		A65AF7020F224C68B3795576 /* ArchiveSource.m in Sources */ = {isa = PBXBuildFile; fileRef = DBB80CD88493F37761E3AAD6 /* ArchiveSource.m */; };
 		A6F219BED004D88C8653726F /* spessasynth_core.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 82355ACDB3A25A8B86B9F558 /* spessasynth_core.framework */; };
+		A774B6601FAAC51CC84E75FF /* SignalMeters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01E9C4583F2DA66D6A2D382D /* SignalMeters.swift */; };
 		A8FF5F24BDA2A4CCD7962A23 /* jxsDecoder.m in Sources */ = {isa = PBXBuildFile; fileRef = ED54D5D3E71CB4B68FF9A896 /* jxsDecoder.m */; };
 		A9633D81A70FF75554884F72 /* AdPlugMetadataReader.mm in Sources */ = {isa = PBXBuildFile; fileRef = 92CE4384AB8EEB743CF83623 /* AdPlugMetadataReader.mm */; };
 		A968FE7037A459B2F8D6FBD4 /* sidplayfp.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = BB821A988F522F49086C420E /* sidplayfp.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -143,6 +147,7 @@
 		B614C2D48EE43B5E8A7C8864 /* ArchiveContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = D5B08E086BBE28004780E318 /* ArchiveContainer.m */; };
 		B69282C19DAF86DF2C96D4DC /* libvorbis.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 94773D810AFC2CF97E33C2A3 /* libvorbis.xcframework */; };
 		B74595DF082BC1778FCD08EA /* GeneralUserGS.sf3 in Resources */ = {isa = PBXBuildFile; fileRef = D1CE5BD588F43A7ECF044221 /* GeneralUserGS.sf3 */; };
+		B755C34E207534B200C0FED7 /* OutputMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFADF619D205FB77124E6CD4 /* OutputMeter.swift */; };
 		B77AC090D246735F6F40317B /* HLSSegment.m in Sources */ = {isa = PBXBuildFile; fileRef = 384C3ABA497C71CD980DDA19 /* HLSSegment.m */; };
 		BC81318A7CD897E52081C83E /* libvgm-player.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 473A22E40B152B3A740A8EB0 /* libvgm-player.xcframework */; };
 		BCEDC3D519FAE1F7864C087B /* libvgmPropertiesReader.mm in Sources */ = {isa = PBXBuildFile; fileRef = 95701CD1532DCD29093ED21B /* libvgmPropertiesReader.mm */; };
@@ -161,7 +166,6 @@
 		D4955CE8F9E6E76A776EBD7F /* HighlyQuixotic.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = B6C40369FED30EEB66982F3D /* HighlyQuixotic.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		D632E0EA9178D1424F2AF004 /* tg300b.sflist.json in Resources */ = {isa = PBXBuildFile; fileRef = E9261831209C36A4CB9BEA60 /* tg300b.sflist.json */; };
 		D673C7E8A201BB50C031AD78 /* opl3.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9CF9C2F2B9DDA99D4C63675A /* opl3.cpp */; };
-		D712A833DC43C5712648684B /* g719.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = AD8405E801C807ED6BEC29F1 /* g719.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		D8A30EB5E6DEC9A1AF93DC1C /* mpcdec.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AE5344866581F96A7CD6622C /* mpcdec.framework */; };
 		DA5267CE8917B3533C05D445 /* wavetable.dat in Resources */ = {isa = PBXBuildFile; fileRef = 9C40DFD0DCCCA4A2F6A64B7D /* wavetable.dat */; };
 		DC787E942570AD43AC969270 /* base64.c in Sources */ = {isa = PBXBuildFile; fileRef = A1BFD6C8AA245760013590FD /* base64.c */; };
@@ -202,13 +206,6 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		06B6573FEA15E1FD7FF82CC7 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 58DDEE63F33D784B1CE15D97 /* g719.xcodeproj */;
-			proxyType = "2";
-			remoteGlobalIDString = "83D7311C1A74968900CA1366";
-			remoteInfo = g719;
-		};
 		09D9B2AE1EF2D73903A36A66 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = F645D9CC326A0E3B95AB895D /* Project object */;
@@ -335,13 +332,6 @@
 			remoteGlobalIDString = "83CB82E22E82D70500CA63C6";
 			remoteInfo = nuked_sc55;
 		};
-		5FA039FE53AA61D5E060EEFD /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = F87D9B2BBCB2C1D4361EF3AB /* libatrac9.xcodeproj */;
-			proxyType = "1";
-			remoteGlobalIDString = "835FC6AF23F61BF0006960FA";
-			remoteInfo = libatrac9;
-		};
 		62538038ED318A2526A6A5E0 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 760AA75FD16080A8594895CD /* GME.xcodeproj */;
@@ -398,13 +388,6 @@
 			remoteGlobalIDString = "8343786D17F9658E00584396";
 			remoteInfo = HighlyTheoretical;
 		};
-		97B4952CCF347F609BF700B6 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 58DDEE63F33D784B1CE15D97 /* g719.xcodeproj */;
-			proxyType = "1";
-			remoteGlobalIDString = "83D7311B1A74968900CA1366";
-			remoteInfo = g719;
-		};
 		9870733BF514D7E94C0D3F24 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = FAB6C2F40A8F45FCF88ACD1B /* libcelt_0061.xcodeproj */;
@@ -439,13 +422,6 @@
 			proxyType = "1";
 			remoteGlobalIDString = "83D6761F26539A7100252130";
 			remoteInfo = libcelt_0061;
-		};
-		AB6F7F258502326475F546EC /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = F87D9B2BBCB2C1D4361EF3AB /* libatrac9.xcodeproj */;
-			proxyType = "2";
-			remoteGlobalIDString = "835FC6B023F61BF0006960FA";
-			remoteInfo = libatrac9;
 		};
 		AC54D512A7A2E5B01320FE9D /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -629,11 +605,9 @@
 				A342A6B9C762A284E90EB82A /* SSEQPlayer.framework in Embed Frameworks */,
 				DE23CEFB0497D6B8165727BA /* Shorten.framework in Embed Frameworks */,
 				056433AE28170C5044BE271A /* Syntrax_c.framework in Embed Frameworks */,
-				D712A833DC43C5712648684B /* g719.framework in Embed Frameworks */,
 				4DE67D8FCD330EFA7EBA5AEB /* lazyusf2.framework in Embed Frameworks */,
 				74CD013E1CB8352E46669BBB /* libAdPlug.framework in Embed Frameworks */,
 				CB67BE88DC354F4638A092F7 /* libOpenMPT.framework in Embed Frameworks */,
-				5B327CCF52E49AC10AFB6BE4 /* libatrac9.framework in Embed Frameworks */,
 				32265ADFA70E9D215E25AB5C /* libbinio.framework in Embed Frameworks */,
 				1DDA904F6B08E65B949544FA /* libcelt_0061.framework in Embed Frameworks */,
 				9A6EA4C67D840E2245E06746 /* libcelt_0110.framework in Embed Frameworks */,
@@ -655,6 +629,7 @@
 /* Begin PBXFileReference section */
 		019ADF4B49F7C630B2C00750 /* libid3tag.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = libid3tag.xcframework; path = ../ThirdParty/libid3tag/ios/libid3tag.xcframework; sourceTree = SOURCE_ROOT; };
 		01CBACE3D702BEB93A4FFE43 /* M3uContainer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; fileEncoding = "4"; name = M3uContainer.m; path = ../Plugins/M3u/M3uContainer.m; sourceTree = SOURCE_ROOT; };
+		01E9C4583F2DA66D6A2D382D /* SignalMeters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SignalMeters.swift; path = ../SignalInspector/SignalMeters.swift; sourceTree = SOURCE_ROOT; };
 		02325170602DA2B4E80294AA /* VorbisDecoder.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; fileEncoding = "4"; name = VorbisDecoder.m; path = ../Plugins/Vorbis/VorbisDecoder.m; sourceTree = SOURCE_ROOT; };
 		036CA9849CAB37A23AC4989A /* AdPlugContainer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; fileEncoding = "4"; name = AdPlugContainer.h; path = ../Plugins/AdPlug/AdPlug/AdPlugContainer.h; sourceTree = SOURCE_ROOT; };
 		070B415F99EE4EA9EA376102 /* MIDIPluginState.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; fileEncoding = "4"; name = MIDIPluginState.m; path = ../Utils/MIDIPluginState.m; sourceTree = SOURCE_ROOT; };
@@ -702,6 +677,7 @@
 		3E752BEA4457DB2E2EE899D5 /* libOpenMPT.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = libOpenMPT.xcodeproj; path = ../Frameworks/OpenMPT/libOpenMPT.xcodeproj; sourceTree = SOURCE_ROOT; };
 		3F70359EFBB8FDFBAB019008 /* sidplayfp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = sidplayfp.xcodeproj; path = ../Frameworks/libsidplayfp/sidplayfp.xcodeproj; sourceTree = SOURCE_ROOT; };
 		40B10BC8E4E51573F98F96ED /* GameDecoder.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; fileEncoding = "4"; name = GameDecoder.h; path = ../Plugins/GME/GameDecoder.h; sourceTree = SOURCE_ROOT; };
+		41E6832858CBCBE4960E6F31 /* VUMeterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VUMeterView.swift; path = ../Visualization/VUMeterView.swift; sourceTree = SOURCE_ROOT; };
 		46D6405F3B78DFF490955EAD /* CoreMIDI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMIDI.framework; path = System/Library/Frameworks/CoreMIDI.framework; sourceTree = SDKROOT; };
 		473A22E40B152B3A740A8EB0 /* libvgm-player.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "libvgm-player.xcframework"; path = "../ThirdParty/libvgm/ios/libvgm-player.xcframework"; sourceTree = SOURCE_ROOT; };
 		484B12BD156A475E5A43AF8D /* libvorbisfile.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = libvorbisfile.xcframework; path = ../ThirdParty/vorbis/ios/libvorbisfile.xcframework; sourceTree = SOURCE_ROOT; };
@@ -713,7 +689,6 @@
 		54AF60E80ABE06A3DD3DAAC4 /* Play.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; name = Play.icon; path = ../Play.icon; sourceTree = SOURCE_ROOT; };
 		553B9138D219EC5DBC3B16F6 /* HighlyQuixotic.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = HighlyQuixotic.xcodeproj; path = ../Frameworks/HighlyQuixotic/HighlyQuixotic.xcodeproj; sourceTree = SOURCE_ROOT; };
 		55E92573511A01118D31E259 /* libvgmDecoder.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; fileEncoding = "4"; name = libvgmDecoder.h; path = ../Plugins/libvgmPlayer/libvgmDecoder.h; sourceTree = SOURCE_ROOT; };
-		58DDEE63F33D784B1CE15D97 /* g719.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = g719.xcodeproj; path = ../Frameworks/g719/g719.xcodeproj; sourceTree = SOURCE_ROOT; };
 		590D39E029664596A83F93F2 /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
 		59C8729440291E31799C5B21 /* nuked_sc55.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = nuked_sc55.xcodeproj; path = "../Frameworks/nuked-sc55/nuked-sc55.xcodeproj"; sourceTree = SOURCE_ROOT; };
 		5A2642BE6FC03B7CE9127E5B /* CueSheetTrack.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; fileEncoding = "4"; name = CueSheetTrack.m; path = ../Plugins/CueSheet/CueSheetTrack.m; sourceTree = SOURCE_ROOT; };
@@ -792,6 +767,7 @@
 		A0EF53735C6DF4F794E3E321 /* libavcodec.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = libavcodec.xcframework; path = ../ThirdParty/ffmpeg/ios/libavcodec.xcframework; sourceTree = SOURCE_ROOT; };
 		A15B973292811547F5271225 /* MP3Decoder.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; fileEncoding = "4"; name = MP3Decoder.m; path = ../Plugins/minimp3/MP3Decoder.m; sourceTree = SOURCE_ROOT; };
 		A1BFD6C8AA245760013590FD /* base64.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; fileEncoding = "4"; name = base64.c; path = "../Plugins/Vorbis/vorbis-tools/share/base64.c"; sourceTree = SOURCE_ROOT; };
+		A296A233F25B5BC7CB708962 /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WaveformView.swift; path = ../Visualization/WaveformView.swift; sourceTree = SOURCE_ROOT; };
 		A2DAE782D8EC423E4681516B /* CVbriHeader.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; fileEncoding = "4"; name = CVbriHeader.c; path = ../Plugins/minimp3/ThirdParty/CVbriHeader.c; sourceTree = SOURCE_ROOT; };
 		A322EB294ED4B2F9C65653DC /* SCPlayer.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; fileEncoding = "4"; name = SCPlayer.mm; path = ../Plugins/MIDI/MIDI/SCPlayer.mm; sourceTree = SOURCE_ROOT; };
 		A57431BC2D46826BFE55992E /* ArchiveContainer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; fileEncoding = "4"; name = ArchiveContainer.h; path = ../Plugins/ArchiveSource/ArchiveSource/ArchiveContainer.h; sourceTree = SOURCE_ROOT; };
@@ -833,6 +809,7 @@
 		CC962CE19DF1CC389D66757D /* Shorten.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = Shorten.xcodeproj; path = ../Frameworks/Shorten/Shorten.xcodeproj; sourceTree = SOURCE_ROOT; };
 		CD92CBA4FB13B40660D230F8 /* SidDecoder.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; fileEncoding = "4"; name = SidDecoder.h; path = ../Plugins/sidplay/SidDecoder.h; sourceTree = SOURCE_ROOT; };
 		CEC2FC031FD3AD6EE6192CF5 /* FlacDecoder.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; fileEncoding = "4"; name = FlacDecoder.m; path = ../Plugins/Flac/FlacDecoder.m; sourceTree = SOURCE_ROOT; };
+		D0370650B61067CFC89A424D /* SpectrumView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SpectrumView.swift; path = ../Visualization/SpectrumView.swift; sourceTree = SOURCE_ROOT; };
 		D05BA07425A81304D0F2D4D1 /* CueSheetMetadataReader.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; fileEncoding = "4"; name = CueSheetMetadataReader.h; path = ../Plugins/CueSheet/CueSheetMetadataReader.h; sourceTree = SOURCE_ROOT; };
 		D105E7348FFC04E58612438E /* vio2sf.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = vio2sf.xcodeproj; path = ../Frameworks/vio2sf/vio2sf.xcodeproj; sourceTree = SOURCE_ROOT; };
 		D1CE5BD588F43A7ECF044221 /* GeneralUserGS.sf3 */ = {isa = PBXFileReference; lastKnownFileType = file; name = GeneralUserGS.sf3; path = ../GeneralUserGS.sf3; sourceTree = SOURCE_ROOT; };
@@ -852,6 +829,7 @@
 		DC5F720C7292C42B874C271A /* SilenceSource.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; fileEncoding = "4"; name = SilenceSource.h; path = ../Plugins/SilenceDecoder/SilenceDecoder/SilenceSource.h; sourceTree = SOURCE_ROOT; };
 		DCC8E68EA4EE2D5F6B25FB46 /* libvgmDecoder.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; fileEncoding = "4"; name = libvgmDecoder.mm; path = ../Plugins/libvgmPlayer/libvgmDecoder.mm; sourceTree = SOURCE_ROOT; };
 		DE5702BF0CCFC1557C2F85B5 /* CueSheetMetadataReader.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; fileEncoding = "4"; name = CueSheetMetadataReader.m; path = ../Plugins/CueSheet/CueSheetMetadataReader.m; sourceTree = SOURCE_ROOT; };
+		DFADF619D205FB77124E6CD4 /* OutputMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OutputMeter.swift; path = ../SignalInspector/OutputMeter.swift; sourceTree = SOURCE_ROOT; };
 		DFFEA0FD74A3E8AE17852FE5 /* minimp3_ex.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; fileEncoding = "4"; name = minimp3_ex.h; path = ../Plugins/minimp3/ThirdParty/minimp3_ex.h; sourceTree = SOURCE_ROOT; };
 		E0468E03B37135675DFB60E6 /* ListenBrainzScrobbler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ListenBrainzScrobbler.swift; path = ../Scrobbler/ListenBrainzScrobbler.swift; sourceTree = SOURCE_ROOT; };
 		E04DE2F7FC66D08A4484D35D /* base64.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; fileEncoding = "4"; name = base64.h; path = "../Plugins/Vorbis/vorbis-tools/include/base64.h"; sourceTree = SOURCE_ROOT; };
@@ -870,6 +848,7 @@
 		E80F8E92F446847E4371DE0D /* jxsDecoder.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; fileEncoding = "4"; name = jxsDecoder.h; path = ../Plugins/Syntrax/Syntrax/jxsDecoder.h; sourceTree = SOURCE_ROOT; };
 		E9261831209C36A4CB9BEA60 /* tg300b.sflist.json */ = {isa = PBXFileReference; lastKnownFileType = file; name = tg300b.sflist.json; path = ../tg300b.sflist.json; sourceTree = SOURCE_ROOT; };
 		E9DCAB0D9B45843111913A4D /* opl3class.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; fileEncoding = "4"; name = opl3class.cpp; path = ../Plugins/MIDI/MIDI/fmopl3lib/opl3class.cpp; sourceTree = SOURCE_ROOT; };
+		EB555EB4EAC3737FD50CC73A /* LyricsText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LyricsText.swift; path = ../LyricsWindow/LyricsText.swift; sourceTree = SOURCE_ROOT; };
 		ECD2BAE4B24BBFA7BBC3EB06 /* SilenceDecoder.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; fileEncoding = "4"; name = SilenceDecoder.h; path = ../Plugins/SilenceDecoder/SilenceDecoder/SilenceDecoder.h; sourceTree = SOURCE_ROOT; };
 		ECE3C4E2FC2391C4F0A0D622 /* roms.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; fileEncoding = "4"; name = roms.hpp; path = ../Plugins/sidplay/roms.hpp; sourceTree = SOURCE_ROOT; };
 		ECF500DF07552252396E735D /* VGMContainer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; fileEncoding = "4"; name = VGMContainer.h; path = ../Plugins/vgmstream/vgmstream/VGMContainer.h; sourceTree = SOURCE_ROOT; };
@@ -887,7 +866,6 @@
 		F3E21729D79E5C9F65246A24 /* HTTPSource.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; fileEncoding = "4"; name = HTTPSource.h; path = ../Plugins/HTTPSource/HTTPSource.h; sourceTree = SOURCE_ROOT; };
 		F5FBD825BD4EED0629EE122D /* GamePropertiesReader.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; fileEncoding = "4"; name = GamePropertiesReader.m; path = ../Plugins/GME/GamePropertiesReader.m; sourceTree = SOURCE_ROOT; };
 		F7A85CBDB9E341E4B487390C /* GamePropertiesReader.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; fileEncoding = "4"; name = GamePropertiesReader.h; path = ../Plugins/GME/GamePropertiesReader.h; sourceTree = SOURCE_ROOT; };
-		F87D9B2BBCB2C1D4361EF3AB /* libatrac9.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = libatrac9.xcodeproj; path = ../Frameworks/libatrac9/libatrac9.xcodeproj; sourceTree = SOURCE_ROOT; };
 		FAB6C2F40A8F45FCF88ACD1B /* libcelt_0061.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = libcelt_0061.xcodeproj; path = ../Frameworks/libcelt_0061/libcelt_0061/libcelt_0061.xcodeproj; sourceTree = SOURCE_ROOT; };
 		FAFC479E1F767D20975F590C /* HVLMetadataReader.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; fileEncoding = "4"; name = HVLMetadataReader.h; path = ../Plugins/Hively/Hively/HVLMetadataReader.h; sourceTree = SOURCE_ROOT; };
 		FB1F5372A8473E7951EE7ABC /* ListenBrainzAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ListenBrainzAPI.swift; path = ../Scrobbler/ListenBrainzAPI.swift; sourceTree = SOURCE_ROOT; };
@@ -1012,14 +990,6 @@
 			name = Pls;
 			sourceTree = "<group>";
 		};
-		0F2F627B69FB4D6537DEA6D4 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				88A9217A5191C8D98C945FA6 /* libatrac9.framework */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
 		1FD7B9513E3B2BF65C111CC4 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -1127,14 +1097,6 @@
 			isa = PBXGroup;
 			children = (
 				80441B975986E51DC78A02ED /* SSEQPlayer.framework */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-		42B36BC06D1BFB99744A4CF0 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				AD8405E801C807ED6BEC29F1 /* g719.framework */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -1306,8 +1268,6 @@
 				59C8729440291E31799C5B21 /* nuked_sc55.xcodeproj */,
 				084D68C64F49A677B48D5ECD /* spessasynth_core.xcodeproj */,
 				356E8BAD9C754F17169B3C9D /* CogPlaylist.xcodeproj */,
-				58DDEE63F33D784B1CE15D97 /* g719.xcodeproj */,
-				F87D9B2BBCB2C1D4361EF3AB /* libatrac9.xcodeproj */,
 				FAB6C2F40A8F45FCF88ACD1B /* libcelt_0061.xcodeproj */,
 				FC15BFC3B9F6EDB8DD2EDD52 /* libcelt_0110.xcodeproj */,
 			);
@@ -1485,6 +1445,12 @@
 				3E614CEC2431896349FF20CD /* CogApp-Info.plist */,
 				491EB8564E09A359D73CF93F /* LrclibClient.swift */,
 				5CE483BAA46D154DB7C97656 /* LyricsLookup.swift */,
+				EB555EB4EAC3737FD50CC73A /* LyricsText.swift */,
+				D0370650B61067CFC89A424D /* SpectrumView.swift */,
+				A296A233F25B5BC7CB708962 /* WaveformView.swift */,
+				41E6832858CBCBE4960E6F31 /* VUMeterView.swift */,
+				DFADF619D205FB77124E6CD4 /* OutputMeter.swift */,
+				01E9C4583F2DA66D6A2D382D /* SignalMeters.swift */,
 				944CD3EC27C2CEAECF2A77A5 /* AudioScrobbler.swift */,
 				D879007E42C4088AC20AC818 /* LastFMAPI.swift */,
 				FB1F5372A8473E7951EE7ABC /* ListenBrainzAPI.swift */,
@@ -1771,8 +1737,6 @@
 			dependencies = (
 				1FBE61DCA5063626A6D95437 /* PBXTargetDependency */,
 				CE681A9B7EED090B11B577DE /* PBXTargetDependency */,
-				42AE74E6E503E8AC0A86171B /* PBXTargetDependency */,
-				CC68625F89BDF124D9EE6712 /* PBXTargetDependency */,
 				055B2C075B313F149CC747EA /* PBXTargetDependency */,
 				15D036EBDBE15890A369326E /* PBXTargetDependency */,
 			);
@@ -1961,14 +1925,6 @@
 					ProjectRef = 356E8BAD9C754F17169B3C9D /* CogPlaylist.xcodeproj */;
 				},
 				{
-					ProductGroup = 42B36BC06D1BFB99744A4CF0 /* Products */;
-					ProjectRef = 58DDEE63F33D784B1CE15D97 /* g719.xcodeproj */;
-				},
-				{
-					ProductGroup = 0F2F627B69FB4D6537DEA6D4 /* Products */;
-					ProjectRef = F87D9B2BBCB2C1D4361EF3AB /* libatrac9.xcodeproj */;
-				},
-				{
 					ProductGroup = 54EA6ADE61A1315B5DE2AA5A /* Products */;
 					ProjectRef = FAB6C2F40A8F45FCF88ACD1B /* libcelt_0061.xcodeproj */;
 				},
@@ -2120,13 +2076,6 @@
 			remoteRef = 22684EFD2A9AA1E7A62BBE25 /* PBXContainerItemProxy */;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
-		88A9217A5191C8D98C945FA6 /* libatrac9.framework */ = {
-			isa = PBXReferenceProxy;
-			fileType = wrapper.framework;
-			path = libatrac9.framework;
-			remoteRef = AB6F7F258502326475F546EC /* PBXContainerItemProxy */;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
 		9378D68A10BE49AD10C96CBB /* Shorten.framework */ = {
 			isa = PBXReferenceProxy;
 			fileType = wrapper.framework;
@@ -2139,13 +2088,6 @@
 			fileType = wrapper.framework;
 			path = snes9x.framework;
 			remoteRef = 85108B9055C03CB16735D0CB /* PBXContainerItemProxy */;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
-		AD8405E801C807ED6BEC29F1 /* g719.framework */ = {
-			isa = PBXReferenceProxy;
-			fileType = wrapper.framework;
-			path = g719.framework;
-			remoteRef = 06B6573FEA15E1FD7FF82CC7 /* PBXContainerItemProxy */;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
 		AE5344866581F96A7CD6622C /* mpcdec.framework */ = {
@@ -2270,6 +2212,12 @@
 			files = (
 				E5CD8A1231982E6483C22451 /* LrclibClient.swift in Sources */,
 				F36D9A91F7D4A4D7E11451F3 /* LyricsLookup.swift in Sources */,
+				5425F638539669076211EE53 /* LyricsText.swift in Sources */,
+				44F439990135AAE534EBCEC5 /* SpectrumView.swift in Sources */,
+				31D0E047A6A92AFAB47913BA /* WaveformView.swift in Sources */,
+				015FFDDEC0B1AA6F22CD8E97 /* VUMeterView.swift in Sources */,
+				B755C34E207534B200C0FED7 /* OutputMeter.swift in Sources */,
+				A774B6601FAAC51CC84E75FF /* SignalMeters.swift in Sources */,
 				B5E7CD172C728F63F23D45E5 /* AudioScrobbler.swift in Sources */,
 				70B81652DBEE4CD771ECDEC7 /* LastFMAPI.swift in Sources */,
 				F26E15EAFFF137930CA989F1 /* ListenBrainzAPI.swift in Sources */,
@@ -2434,11 +2382,6 @@
 			name = HivelyPlayer;
 			targetProxy = F569B0ECD74FEFEBA3F879AF /* PBXContainerItemProxy */;
 		};
-		42AE74E6E503E8AC0A86171B /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			name = g719;
-			targetProxy = 97B4952CCF347F609BF700B6 /* PBXContainerItemProxy */;
-		};
 		643F92D8EE5AEE7EB6A0F5B4 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = HighlyExperimental;
@@ -2508,11 +2451,6 @@
 			isa = PBXTargetDependency;
 			name = GME;
 			targetProxy = 62538038ED318A2526A6A5E0 /* PBXContainerItemProxy */;
-		};
-		CC68625F89BDF124D9EE6712 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			name = libatrac9;
-			targetProxy = 5FA039FE53AA61D5E060EEFD /* PBXContainerItemProxy */;
 		};
 		CE681A9B7EED090B11B577DE /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;

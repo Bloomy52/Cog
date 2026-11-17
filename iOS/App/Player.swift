@@ -13,6 +13,7 @@ import CogAudio
 import CogPlaylist
 import Combine
 import MediaPlayer
+import UIKit
 
 /// The playing entry's position, apart from Player: it changes four times a
 /// second, and only what shows it should redraw that often.
@@ -27,8 +28,9 @@ final class Player: NSObject, ObservableObject {
 	let loader: PlaylistLoader
 	let equalizer = Equalizer()
 	let waveform = WaveformModel()
-	// -init returns id, so Swift sees it as failable; it never fails.
-	private let audioPlayer: AudioPlayer = AudioPlayer()!
+	// -init returns id, so Swift sees it as failable; it never fails. The
+	// VU meter reads its levels.
+	let audioPlayer: AudioPlayer = AudioPlayer()!
 
 	@Published private(set) var status: CogStatus = .stopped
 	/// Seconds into the entry playing, refreshed while it plays, in `clock`
@@ -48,6 +50,9 @@ final class Player: NSObject, ObservableObject {
 	private var defaultsObserver: NSObjectProtocol?
 	/// The rate the lock screen last heard, which the tempo sets.
 	private var reportedRate = 1.0
+	/// Starts of audio under way, and the background time they run on.
+	private var audioStarts = 0
+	private var audioStartTime = UIBackgroundTaskIdentifier.invalid
 
 	/// How fast playback runs through the track: the tempo, unless the
 	/// stretch is off.
@@ -90,23 +95,60 @@ final class Player: NSObject, ObservableObject {
 
 	// MARK: - Control
 
-	func play(_ entry: PlaylistEntry, from seconds: Double = 0) {
+	func play(_ entry: PlaylistEntry, from seconds: Double = 0, paused: Bool = false) {
 		guard let url = entry.url else { return }
 		model.setCurrent(entry)
 		position = seconds
+		guard !paused else {
+			// Nothing is heard yet: resuming activates the session.
+			audioPlayer.play(url, withUserInfo: entry, withRGInfo: entry.replayGainInfo, startPaused: true, andSeekTo: seconds)
+			return
+		}
+		startingAudio { [self] in
+			audioPlayer.play(url, withUserInfo: entry, withRGInfo: entry.replayGainInfo, startPaused: false, andSeekTo: seconds)
+		}
+	}
+
+	/// Activates the session, then runs `start`, on background time: a
+	/// remote command wakes a suspended app only for a moment, and activating
+	/// the session for Bluetooth headphones can outlast it.
+	private func startingAudio(_ start: @escaping @MainActor () -> Void) {
+		if audioStarts == 0 {
+			audioStartTime = UIApplication.shared.beginBackgroundTask(withName: "Starting audio") { [weak self] in
+				MainActor.assumeIsolated { self?.endAudioStartTime() }
+			}
+		}
+		audioStarts += 1
 		Task {
 			do {
 				try await DeviceOutput.activateSession()
 			} catch {
 				NSLog("Could not activate the audio session: \(error)")
 			}
-			audioPlayer.play(url, withUserInfo: entry, withRGInfo: entry.replayGainInfo, startPaused: false, andSeekTo: seconds)
+			start()
+			audioStarts -= 1
+			if audioStarts == 0 { endAudioStartTime() }
 		}
 	}
 
+	private func endAudioStartTime() {
+		guard audioStartTime != .invalid else { return }
+		UIApplication.shared.endBackgroundTask(audioStartTime)
+		audioStartTime = .invalid
+	}
+
 	func togglePlayPause() {
+		if status == .playing {
+			pause()
+		} else {
+			startPlaying()
+		}
+	}
+
+	/// Plays, whatever the state: never pauses, as a Play command must not.
+	func startPlaying() {
 		switch status {
-		case .playing: pause()
+		case .playing: break
 		case .paused: resume()
 		default:
 			if let entry = model.currentEntry ?? model.entries.first { play(entry) }
@@ -120,8 +162,7 @@ final class Player: NSObject, ObservableObject {
 
 	func resume() {
 		guard status == .paused else { return }
-		Task {
-			try? await DeviceOutput.activateSession()
+		startingAudio { [self] in
 			audioPlayer.resume()
 		}
 	}
@@ -161,7 +202,7 @@ final class Player: NSObject, ObservableObject {
 
 	/// The first entry of the next album along the playlist.
 	func nextAlbum() {
-		let entries = model.entries
+		let entries = model.playingEntries
 		guard let current = model.currentEntry, let index = entries.firstIndex(of: current),
 		      let next = entries[(index + 1)...].first(where: { $0.album != current.album }) else { return }
 		play(next)
@@ -169,13 +210,24 @@ final class Player: NSObject, ObservableObject {
 
 	/// The first entry of the album before this one along the playlist.
 	func previousAlbum() {
-		let entries = model.entries
+		let entries = model.playingEntries
 		guard let current = model.currentEntry, var start = entries.firstIndex(of: current) else { return }
 		while start > 0 && entries[start - 1].album == current.album { start -= 1 }
 		guard start > 0 else { return }
 		var previous = start - 1
 		while previous > 0 && entries[previous - 1].album == entries[start - 1].album { previous -= 1 }
 		play(entries[previous])
+	}
+
+	/// For synced lyrics: the entry playing's position, read fresh rather
+	/// than from the clock's four ticks a second.
+	var lyricsPlayback: LyricsPlayback {
+		LyricsPlayback(position: { [weak self] entry in
+			guard let self, entry == self.model.currentEntry, self.status != .stopped else { return nil }
+			return self.audioPlayer.amountPlayed()
+		}, seek: { [weak self] seconds in
+			self?.seek(to: seconds)
+		})
 	}
 
 	// MARK: - Fast forward and rewind
@@ -273,7 +325,7 @@ final class Player: NSObject, ObservableObject {
 	private func setUpRemoteCommands() {
 		let center = MPRemoteCommandCenter.shared()
 		center.playCommand.addTarget { [weak self] _ in
-			MainActor.assumeIsolated { self?.togglePlayPause() }
+			MainActor.assumeIsolated { self?.startPlaying() }
 			return .success
 		}
 		center.pauseCommand.addTarget { [weak self] _ in
@@ -402,9 +454,7 @@ extension Player {
 	@objc func audioPlayer(_ player: AudioPlayer, restartPlaybackAtCurrentPosition userInfo: Any?) {
 		MainActor.assumeIsolated {
 			guard let entry = userInfo as? PlaylistEntry ?? model.currentEntry else { return }
-			let paused = status == .paused
-			play(entry, from: audioPlayer.amountPlayed())
-			if paused { pause() }
+			play(entry, from: audioPlayer.amountPlayed(), paused: status == .paused)
 		}
 	}
 

@@ -47,6 +47,10 @@ Xcode-config/SENTRY_SETTINGS.xcconfig
 /ThirdParty/ogg/lib/libogg.0.dylib
 /ThirdParty/opus/lib/libopus.0.dylib
 /ThirdParty/opusfile/lib/libopusfile.0.dylib
+/ThirdParty/projectM/lib/libprojectM-4.4.dylib
+/ThirdParty/projectM/lib/libprojectM-4-playlist.4.dylib
+/ThirdParty/angle/lib/libEGL.dylib
+/ThirdParty/angle/lib/libGLESv2.dylib
 /ThirdParty/rubberband/lib/librubberband.3.dylib
 /ThirdParty/speex/libspeex.a
 /ThirdParty/vorbis/lib/libvorbisfile.3.dylib
@@ -55,3 +59,5 @@ Xcode-config/SENTRY_SETTINGS.xcconfig
 /ThirdParty/WavPack/lib/libwavpack.a
 # iOS builds of the libraries, from Scripts/build-ios-libraries.sh
 /ThirdParty/*/ios/
+# Editor settings stay local
+/.vscode/

@@ -14,6 +14,8 @@
 
 #import "DNDArrayController.h"
 
+#import <CogPlaylist/CogPlaylist-Swift.h>
+
 @class AlbumArtwork;
 
 @class PlaylistLoader;
@@ -31,15 +33,14 @@
 	NSValueTransformer *statusImageTransformer;
 	NSValueTransformer *numberHertzToStringTransformer;
 
-	NSMutableArray *shuffleList;
-	NSMutableArray *queueList;
-
 	NSString *totalTime;
 	NSString *currentStatus;
 
 	PlaylistEntry *currentEntry;
 
-	PlaylistEntry *nextEntryAfterDeleted;
+	// Each playlist's selection and scroll position, by UUID, for coming back
+	// to it.
+	NSMutableDictionary<NSString *, NSDictionary *> *viewStates;
 
 	NSUndoManager *undoManager;
 
@@ -51,6 +52,12 @@
 @property(retain) NSString *_Nullable currentStatus;
 
 @property(strong, nonatomic, readonly) NSPersistentContainer *_Nonnull persistentContainer;
+
+/// What plays next, shared with the iOS app: the queue, shuffle and repeat,
+/// within the playing entry's playlist.
+@property(strong, nonatomic, readonly) PlaybackOrder *_Nonnull playbackOrder;
+/// The playlist the table shows, which need not be the one playing.
+@property(strong, nonatomic, readonly) Playlist *_Nullable shownPlaylist;
 
 // Private Methods
 - (void)commitPersistentStore;
@@ -64,7 +71,6 @@
 - (ShuffleMode)shuffle;
 - (void)setRepeat:(RepeatMode)r;
 - (RepeatMode)repeat;
-- (NSArray *_Nullable)filterPlaylistOnAlbum:(NSString *_Nullable)album;
 
 - (PlaylistEntry *_Nullable)getNextEntry:(PlaylistEntry *_Nullable)pe;
 - (PlaylistEntry *_Nullable)getPrevEntry:(PlaylistEntry *_Nullable)pe;
@@ -98,20 +104,26 @@
 - (BOOL)next;
 - (BOOL)prev;
 
-- (void)addShuffledListToBack;
-- (void)addShuffledListToFront;
 - (void)resetShuffleList;
 
-- (PlaylistEntry *_Nullable)shuffledEntryAtIndex:(NSInteger)i;
+/// The first entry to play in the shown playlist: its first, or shuffle's.
+- (PlaylistEntry *_Nullable)firstEntryToPlay;
 - (PlaylistEntry *_Nullable)entryAtIndex:(NSInteger)i;
 
 // Event inlets:
-- (void)willInsertURLs:(NSArray *_Nullable)urls origin:(URLOrigin)origin;
+- (void)willInsertURLs:(NSArray *_Nullable)urls origin:(URLOrigin)origin playlist:(Playlist *_Nullable)playlist;
 - (void)didInsertURLs:(NSArray *_Nullable)urls origin:(URLOrigin)origin;
 
-// Asynchronous event handler
+// Asynchronous event handler, called as the user acts: the URLs load in the
+// background, into the playlist given as "playlist" or the one shown now,
+// though another may be shown by the time they are ready. "index" is where
+// in it, the end when negative or missing.
 - (void)addURLsInBackground:(NSDictionary *_Nonnull)input;
 - (void)insertURLsInBackground:(NSDictionary *_Nonnull)input;
+
+/// Puts `entries` at `index` (the end when negative) of `playlist`, shown or
+/// not; of the shown one if `playlist` is nil or has since been deleted.
+- (void)insertEntries:(NSArray<PlaylistEntry *> *_Nonnull)entries atIndex:(NSInteger)index intoPlaylist:(Playlist *_Nullable)playlist;
 
 // queue methods
 - (IBAction)toggleQueued:(id _Nullable)sender;
@@ -119,11 +131,26 @@
 - (BOOL)removeEntryAtIndex:(NSInteger)i;
 - (IBAction)emptyQueueList:(id _Nullable)sender;
 - (void)emptyQueueListUnsynced;
-- (NSMutableArray *_Nullable)queueList;
+- (NSArray<PlaylistEntry *> *_Nonnull)queueList;
+
+/// The row showing `pe`, or NSNotFound: removed, in another playlist, or
+/// hidden by the search.
+- (NSInteger)rowForEntry:(PlaylistEntry *_Nullable)pe;
+- (void)reloadRowsForEntries:(id<NSFastEnumeration> _Nonnull)entries;
+
+/// Puts `playlist` in the table; playback goes on where it was. A column
+/// sort stays the order of the playlist it was made in.
+- (void)showPlaylist:(Playlist *_Nonnull)playlist;
+/// The playlist playback goes on in: the current entry's.
+@property(nonatomic, readonly) Playlist *_Nullable playingPlaylist;
+/// For the playlist commands in Swift: stops playback, or has the engine
+/// ask again what plays next.
+- (void)stopPlayback;
+- (void)playingPlaylistDidChange;
+- (void)addEntriesToQueue:(NSArray<PlaylistEntry *> *_Nonnull)entries;
 
 // internal methods for data store init
 - (void)readQueueFromDataStore;
-- (void)readShuffleListFromDataStore;
 
 + (NSPersistentContainer *_Nonnull)sharedPersistentContainer;
 
@@ -138,6 +165,7 @@
 - (void)updatePlayCountForTrack:(PlaylistEntry *_Nonnull)pe;
 - (void)firstSawTrack:(PlaylistEntry *_Nonnull)pe;
 - (void)firstSawTrackWithoutReload:(PlaylistEntry *_Nonnull)pe;
+- (void)firstSawTracksWithoutReload:(NSArray<PlaylistEntry *> *_Nonnull)entries;
 
 - (void)moveObjectsInArrangedObjectsFromIndexes:(NSIndexSet *_Nullable)indexSet
                                         toIndex:(NSUInteger)insertIndex;

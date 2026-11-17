@@ -108,14 +108,23 @@ static void *playlistControllerContext = &playlistControllerContext;
 	self = [super initWithCoder:decoder];
 	if(!self) return nil;
 
-	shuffleList = [NSMutableArray new];
-	queueList = [NSMutableArray new];
-
 	undoManager = [NSUndoManager new];
 
 	[undoManager setLevelsOfUndo:UNDO_STACK_LIMIT];
 
 	[self initDefaults];
+
+	// Spotlight's results controller is one of these too: it shares the
+	// playlist's store rather than opening another.
+	if(kPersistentContainer) {
+		_persistentContainer = kPersistentContainer;
+		__weak PlaylistController *weakSelf = self;
+		_playbackOrder = [[PlaybackOrder alloc] initWithDefaults:[NSUserDefaults standardUserDefaults]
+		                                                    save:^{
+			                                                    [weakSelf commitPersistentStoreAsync];
+		                                                    }];
+		return self;
+	}
 
 	// The model CogPlaylist compiles, whose entities are its classes; the store
 	// stays where it always was.
@@ -134,6 +143,12 @@ static void *playlistControllerContext = &playlistControllerContext;
 	// Where entries keep their album art; it takes in the stored pictures as
 	// the playlist loads.
 	ArtworkStore.shared = [[ArtworkStore alloc] initWithContext:self.persistentContainer.viewContext];
+
+	__weak PlaylistController *weakSelf = self;
+	_playbackOrder = [[PlaybackOrder alloc] initWithDefaults:[NSUserDefaults standardUserDefaults]
+	                                                    save:^{
+		                                                    [weakSelf commitPersistentStoreAsync];
+	                                                    }];
 
 	return self;
 }
@@ -159,9 +174,19 @@ static void *playlistControllerContext = &playlistControllerContext;
 	                     forKeyPath:@"progressOverall"
 	                        options:(NSKeyValueObservingOptionNew | NSKeyValueObservingOptionInitial | NSKeyValueObservingOptionOld)
 	                        context:playlistControllerContext];
+	[playbackController addObserver:self
+	                     forKeyPath:@"progressMetadata"
+	                        options:(NSKeyValueObservingOptionNew | NSKeyValueObservingOptionInitial | NSKeyValueObservingOptionOld)
+	                        context:playlistControllerContext];
 	[[NSUserDefaultsController sharedUserDefaultsController] addObserver:self forKeyPath:@"values.fontSize" options:(NSKeyValueObservingOptionNew | NSKeyValueObservingOptionInitial) context:playlistControllerContext];
 
 	observersRegistered = YES;
+
+	__weak PlaylistController *weakSelf = self;
+	self.playbackOrder.onFollow = ^(PlaylistEntry *pe) {
+		PlaylistController *strongSelf = weakSelf;
+		if(strongSelf) [strongSelf->appController selectTrack:pe];
+	};
 
 	[self.tableView setDraggingSourceOperationMask:NSDragOperationCopy forLocal:NO];
 }
@@ -170,6 +195,7 @@ static void *playlistControllerContext = &playlistControllerContext;
 	if(observersRegistered) {
 		[self removeObserver:self forKeyPath:@"arrangedObjects" context:playlistControllerContext];
 		[playbackController removeObserver:self forKeyPath:@"progressOverall" context:playlistControllerContext];
+		[playbackController removeObserver:self forKeyPath:@"progressMetadata" context:playlistControllerContext];
 		[[NSUserDefaultsController sharedUserDefaultsController] removeObserver:self forKeyPath:@"values.fontSize" context:playlistControllerContext];
 	}
 }
@@ -195,7 +221,8 @@ static void *playlistControllerContext = &playlistControllerContext;
 			[self.tableView reloadData];
 		} else if([keyPath isEqualToString:@"values.fontSize"]) {
 			[self updateRowSize];
-		} else if([keyPath isEqualToString:@"progressOverall"]) {
+		} else if([keyPath isEqualToString:@"progressOverall"] ||
+		          [keyPath isEqualToString:@"progressMetadata"]) {
 			id objNew = [change objectForKey:NSKeyValueChangeNewKey];
 			id objOld = [change objectForKey:NSKeyValueChangeOldKey];
 
@@ -226,17 +253,22 @@ static void *playlistControllerContext = &playlistControllerContext;
 
 - (void)updateProgressText {
 	NSString *description = nil;
-	if(playbackController.progressOverall) {
+	NSProgress *progress = playbackController.progressOverall;
+	if(progress) {
 		if(playbackController.progressJob) {
-			description = [NSString stringWithFormat:@"%@ - %@", playbackController.progressOverall.localizedDescription, playbackController.progressJob.localizedDescription];
+			description = [NSString stringWithFormat:@"%@ - %@", progress.localizedDescription, playbackController.progressJob.localizedDescription];
 		} else {
-			description = playbackController.progressOverall.localizedDescription;
+			description = progress.localizedDescription;
 		}
+	} else {
+		// Tags loading in the background show while nothing else does
+		progress = playbackController.progressMetadata;
+		description = progress.localizedDescription;
 	}
 
 	if(description) {
 		[self setTotalTime:nil];
-		description = [description stringByAppendingFormat:@" - %.2f%% complete", playbackController.progressOverall.fractionCompleted * 100.0];
+		description = [description stringByAppendingFormat:@" - %.2f%% complete", progress.fractionCompleted * 100.0];
 		[self setCurrentStatus:description];
 	} else {
 		[self setCurrentStatus:nil];
@@ -289,19 +321,13 @@ static void *playlistControllerContext = &playlistControllerContext;
 	
 	[self commitPersistentStoreAsync];
 	
-	NSIndexSet *refreshRow = [NSIndexSet indexSetWithIndex:pe.index];
-	NSIndexSet *refreshColumns = [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, [[self.tableView tableColumns] count])];
-
-	[self.tableView reloadDataForRowIndexes:refreshRow columnIndexes:refreshColumns];
+	[self reloadRowsForEntries:@[pe]];
 }
 
 - (void)firstSawTrack:(PlaylistEntry *)pe {
 	[self firstSawTrackWithoutReload:pe];
 
-	NSIndexSet *refreshRow = [NSIndexSet indexSetWithIndex:pe.index];
-	NSIndexSet *refreshColumns = [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, [[self.tableView tableColumns] count])];
-
-	[self.tableView reloadDataForRowIndexes:refreshRow columnIndexes:refreshColumns];
+	[self reloadRowsForEntries:@[pe]];
 }
 
 - (void)firstSawTrackWithoutReload:(PlaylistEntry *)pe {
@@ -317,6 +343,77 @@ static void *playlistControllerContext = &playlistControllerContext;
 			pc.title = pe.title;
 			pc.filename = pe.filenameFragment;
 		}];
+	}
+}
+
+// firstSawTrackWithoutReload: for many entries at once: the play counts
+// they may have are fetched together, where each entry would fetch up to
+// three times on its own.
+- (void)firstSawTracksWithoutReload:(NSArray<PlaylistEntry *> *)entries {
+	if(![entries count]) return;
+
+	NSManagedObjectContext *moc = self.persistentContainer.viewContext;
+
+	NSMutableSet *titles = [NSMutableSet new];
+	NSMutableSet *filenames = [NSMutableSet new];
+	for(PlaylistEntry *pe in entries) {
+		if(pe.title) [titles addObject:pe.title];
+		if(pe.filenameFragment) [filenames addObject:pe.filenameFragment];
+		if(pe.filename) [filenames addObject:pe.filename];
+	}
+
+	// Tags as playCountItem matches them: album, artist and title.
+	NSArray * (^tagKey)(NSString *, NSString *, NSString *) = ^NSArray *(NSString *album, NSString *artist, NSString *title) {
+		return @[album ?: [NSNull null], artist ?: [NSNull null], title ?: [NSNull null]];
+	};
+
+	NSMutableSet *knownTags = [NSMutableSet new];
+	NSMutableSet *knownFilenames = [NSMutableSet new];
+
+	[moc performBlockAndWait:^{
+		NSError *error = nil;
+		if([titles count]) {
+			NSFetchRequest *request = [NSFetchRequest fetchRequestWithEntityName:@"PlayCount"];
+			request.predicate = [NSPredicate predicateWithFormat:@"title IN %@", titles];
+			for(PlayCount *pc in [moc executeFetchRequest:request error:&error]) {
+				[knownTags addObject:tagKey(pc.album, pc.artist, pc.title)];
+			}
+		}
+		if([filenames count]) {
+			NSFetchRequest *request = [NSFetchRequest fetchRequestWithEntityName:@"PlayCount"];
+			request.predicate = [NSPredicate predicateWithFormat:@"filename IN %@", filenames];
+			for(PlayCount *pc in [moc executeFetchRequest:request error:&error]) {
+				if(pc.filename) [knownFilenames addObject:pc.filename];
+			}
+		}
+	}];
+
+	for(PlaylistEntry *pe in entries) {
+		if(!pe.title) {
+			// No title to look for together.
+			[self firstSawTrackWithoutReload:pe];
+			continue;
+		}
+		NSArray *key = tagKey(pe.album, pe.artist, pe.title);
+		if([knownTags containsObject:key]) continue;
+		if((pe.filenameFragment && [knownFilenames containsObject:pe.filenameFragment]) ||
+		   (pe.filename && [knownFilenames containsObject:pe.filename])) {
+			// Counted under its file name only, which playCountItem tags.
+			[self firstSawTrackWithoutReload:pe];
+			[knownTags addObject:key];
+			continue;
+		}
+		[moc performBlockAndWait:^{
+			PlayCount *pc = [NSEntityDescription insertNewObjectForEntityForName:@"PlayCount" inManagedObjectContext:moc];
+			pc.count = 0;
+			pc.firstSeen = [NSDate date];
+			pc.album = pe.album;
+			pc.artist = pe.artist;
+			pc.title = pe.title;
+			pc.filename = pe.filenameFragment;
+		}];
+		[knownTags addObject:key];
+		if(pe.filenameFragment) [knownFilenames addObject:pe.filenameFragment];
 	}
 }
 
@@ -342,10 +439,7 @@ static void *playlistControllerContext = &playlistControllerContext;
 
 		[self commitPersistentStoreAsync];
 
-		NSIndexSet *refreshRow = [NSIndexSet indexSetWithIndex:pe.index];
-		NSIndexSet *refreshColumns = [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, [[self.tableView tableColumns] count])];
-
-		[self.tableView reloadDataForRowIndexes:refreshRow columnIndexes:refreshColumns];
+		[self reloadRowsForEntries:@[pe]];
 	}
 }
 
@@ -370,6 +464,8 @@ static void *playlistControllerContext = &playlistControllerContext;
 }
 
 - (void)updatePlaylistIndexes {
+	// A search shows only some entries; their places in the playlist stay.
+	if([self filterPredicate]) return;
 	NSArray *arranged = [self arrangedObjects];
 	NSUInteger n = [arranged count];
 	BOOL updated = NO;
@@ -631,7 +727,16 @@ static void *playlistControllerContext = &playlistControllerContext;
 	NSString *cellIdentifier = [column identifier];
 	NSUInteger index = [cellIdentifiers indexOfObject:cellIdentifier];
 	if(index == 13) {
-		NSInteger rating = ((CGFloat)ceil(cellPoint.x * 5.0 / 64.0));
+		// By where the stars are drawn, at the playlist's font size; a click
+		// past the last star is not a rating.
+		NSTableCellView *cellView = [view viewAtColumn:clickedColumn row:clickedRow makeIfNecessary:NO];
+		NSTextField *textField = [cellView isKindOfClass:[NSTableCellView class]] ? cellView.textField : nil;
+		if(!textField) return;
+		NSRect textRect = [textField.cell titleRectForBounds:textField.bounds];
+		CGFloat starsWidth = textField.attributedStringValue.size.width;
+		CGFloat x = [textField convertPoint:cellPoint fromView:cellView].x - NSMinX(textRect);
+		if(starsWidth <= 0 || x >= starsWidth) return;
+		NSInteger rating = (NSInteger)floor(x * 5.0 / starsWidth) + 1;
 		if(rating < 1) rating = 1;
 		else if(rating > 5) rating = 5;
 
@@ -648,32 +753,8 @@ static void *playlistControllerContext = &playlistControllerContext;
 
 - (void)updateRowSize {
 	[self.tableView reloadData];
-	if(currentEntry != nil) [self.tableView scrollRowToVisible:currentEntry.index];
-}
-
-- (void)updateNextAfterDeleted:(PlaylistEntry *)lastEntry withDeleteIndexes:(NSIndexSet *)indexes {
-	__block PlaylistEntry *pe = nil;
-	NSArray *allObjects = [self arrangedObjects];
-	[indexes enumerateRangesUsingBlock:^(NSRange range, BOOL *_Nonnull stop) {
-		if(range.location <= lastEntry.index &&
-		   range.location + range.length > lastEntry.index) {
-			NSUInteger index = range.location + range.length;
-			if(index < [allObjects count])
-				pe = [allObjects objectAtIndex:index];
-			else
-				pe = nil;
-		} else if(pe && range.location <= [pe index] &&
-		          range.location + range.length > [pe index]) {
-			NSUInteger index = range.location + range.length;
-			if(index < [allObjects count])
-				pe = [allObjects objectAtIndex:index];
-			else
-				pe = nil;
-		} else if(pe && range.location > [pe index]) {
-			*stop = YES;
-		}
-	}];
-	nextEntryAfterDeleted = pe;
+	NSInteger row = [self rowForEntry:currentEntry];
+	if(row != NSNotFound) [self.tableView scrollRowToVisible:row];
 }
 
 - (void)tableView:(NSTableView *)tableView didClickTableColumn:(NSTableColumn *)tableColumn {
@@ -897,7 +978,7 @@ static void *playlistControllerContext = &playlistControllerContext;
 			                               @"sort": @YES,
 			                               @"origin": @(URLOriginInternal) };
 
-		[self performSelectorInBackground:@selector(insertURLsInBackground:) withObject:loadEntriesData];
+		[self insertURLsInBackground:loadEntriesData];
 	}
 
 	return YES;
@@ -957,6 +1038,9 @@ static void *playlistControllerContext = &playlistControllerContext;
 }
 
 - (void)insertObjectsUnsynced:(NSArray *)objects atArrangedObjectIndexes:(NSIndexSet *)indexes {
+	for(PlaylistEntry *pe in objects) {
+		pe.playlist = self.shownPlaylist;
+	}
 	[super insertObjects:objects atArrangedObjectIndexes:indexes];
 	[self rearrangeObjects];
 
@@ -989,6 +1073,7 @@ static void *playlistControllerContext = &playlistControllerContext;
 
 	for(PlaylistEntry *pe in objects) {
 		pe.deLeted = NO;
+		pe.playlist = self.shownPlaylist;
 	}
 
 	// further bodge fix
@@ -1088,36 +1173,10 @@ static void *playlistControllerContext = &playlistControllerContext;
 	DLog(@"Removing indexes: %@", indexes);
 	DLog(@"Current index: %lli", currentEntry.index);
 
-	NSMutableIndexSet *unarrangedIndexes = [NSMutableIndexSet new];
+	// Where playback goes on from, if the current entry is among them.
+	[self.playbackOrder willRemoveEntries:objects current:currentEntry];
 	for(PlaylistEntry *pe in objects) {
-		[unarrangedIndexes addIndex:[pe index]];
 		pe.deLeted = YES;
-	}
-
-	if([indexes containsIndex:currentEntry.index]) {
-		[self updateNextAfterDeleted:currentEntry withDeleteIndexes:indexes];
-	} else if(nextEntryAfterDeleted &&
-	          [indexes containsIndex:nextEntryAfterDeleted.index]) {
-		[self updateNextAfterDeleted:nextEntryAfterDeleted withDeleteIndexes:indexes];
-	}
-
-	if(currentEntry.index >= 0 && [unarrangedIndexes containsIndex:currentEntry.index]) {
-		currentEntry.index = -currentEntry.index - 1;
-		DLog(@"Current removed: %lli", currentEntry.index);
-	}
-
-	if(currentEntry.index < 0) // Need to update the negative index
-	{
-		NSInteger i = -currentEntry.index - 1;
-		DLog(@"I is %li", i);
-		NSInteger j;
-		for(j = i - 1; j >= 0; j--) {
-			if([unarrangedIndexes containsIndex:j]) {
-				DLog(@"Removing 1");
-				i--;
-			}
-		}
-		currentEntry.index = -i - 1;
 	}
 
 	[super removeObjectsAtArrangedObjectIndexes:indexes];
@@ -1141,17 +1200,17 @@ static void *playlistControllerContext = &playlistControllerContext;
 	DLog(@"Trashing indexes: %@", indexes);
 	DLog(@"Current index: %lli", currentEntry.index);
 
-	NSMutableIndexSet *unarrangedIndexes = [NSMutableIndexSet new];
+	BOOL trashingCurrent = currentEntry && [objects containsObject:currentEntry];
+	[self.playbackOrder willRemoveEntries:objects current:currentEntry];
 	for(PlaylistEntry *pe in objects) {
-		[unarrangedIndexes addIndex:[pe index]];
 		pe.deLeted = YES;
 	}
 
-	if([indexes containsIndex:currentEntry.index]) {
-		[self updateNextAfterDeleted:currentEntry withDeleteIndexes:indexes];
-		if(nextEntryAfterDeleted) {
-			[playbackController playEntry:nextEntryAfterDeleted];
-			nextEntryAfterDeleted = nil;
+	if(trashingCurrent) {
+		PlaylistEntry *next = self.playbackOrder.nextEntryAfterDeleted;
+		if(next) {
+			[playbackController playEntry:next];
+			self.playbackOrder.nextEntryAfterDeleted = nil;
 		} else {
 			[playbackController stop:nil];
 		}
@@ -1417,123 +1476,12 @@ BOOL showTrashConsent(NSWindow *window) {
 	}
 }
 
-- (PlaylistEntry *)shuffledEntryAtIndex:(NSInteger)i {
-	RepeatMode repeat = [self repeat];
-
-	while(i < 0) {
-		if(repeat == RepeatModeRepeatAll) {
-			[self addShuffledListToFront];
-			// change i appropriately
-			i += [[self arrangedObjects] count];
-		} else {
-			return nil;
-		}
-	}
-	while(i >= [shuffleList count]) {
-		if(repeat == RepeatModeRepeatAll) {
-			[self addShuffledListToBack];
-		} else {
-			return nil;
-		}
-	}
-
-	return shuffleList[i];
-}
-
 - (PlaylistEntry *)getNextEntry:(PlaylistEntry *)pe {
 	return [self getNextEntry:pe ignoreRepeatOne:NO];
 }
 
 - (PlaylistEntry *)getNextEntry:(PlaylistEntry *)pe ignoreRepeatOne:(BOOL)ignoreRepeatOne {
-	BOOL selectionFollows = [[NSUserDefaults standardUserDefaults] boolForKey:@"selectionFollowsPlayback"];
-
-	if(!ignoreRepeatOne && [[NSUserDefaults standardUserDefaults] boolForKey:@"alwaysStopAfterCurrent"]) {
-		if(selectionFollows) {
-			PlaylistEntry *nextPe = [self getNextEntry:pe ignoreRepeatOne:YES];
-			[appController selectTrack:nextPe];
-		}
-		return nil;
-	}
-
-	if(!ignoreRepeatOne && [self repeat] == RepeatModeRepeatOne) {
-		if(selectionFollows) {
-			[appController selectTrack:pe];
-		}
-		return pe;
-	}
-
-	if([queueList count] > 0) {
-		pe = queueList[0];
-		[queueList removeObjectAtIndex:0];
-		pe.queued = NO;
-		[pe setQueuePosition:-1];
-
-		int i;
-		for(i = 0; i < [queueList count]; i++) {
-			PlaylistEntry *queueItem = queueList[i];
-			[queueItem setQueuePosition:i];
-		}
-
-		[self commitPersistentStoreAsync];
-
-		if(selectionFollows) {
-			[appController selectTrack:pe];
-		}
-
-		return pe;
-	}
-
-	if([self shuffle] != ShuffleOff) {
-		PlaylistEntry *nextPe = [self shuffledEntryAtIndex:(pe.shuffleIndex + 1)];
-		if(selectionFollows && nextPe) {
-			[appController selectTrack:nextPe];
-		}
-		return nextPe;
-	} else {
-		NSInteger i;
-
-		if(pe.deLeted) // Was a current entry, now removed.
-		{
-			if(nextEntryAfterDeleted)
-				i = nextEntryAfterDeleted.index;
-			else
-				i = 0;
-			nextEntryAfterDeleted = nil;
-		} else {
-			i = pe.index + 1;
-		}
-
-		if([self repeat] == RepeatModeRepeatAlbum) {
-			PlaylistEntry *next = [self entryAtIndex:i];
-
-			if((i > [[self arrangedObjects] count] - 1) ||
-			   ([[next album] caseInsensitiveCompare:[pe album]]) || ([next album] == nil)) {
-				NSArray *filtered = [self filterPlaylistOnAlbum:[pe album]];
-				if([pe album] == nil || !filtered || [filtered count] < 1)
-					i--;
-				else
-					i = [(PlaylistEntry *)filtered[0] index];
-			}
-		}
-
-		PlaylistEntry *nextPe = [self entryAtIndex:i];
-
-		if(selectionFollows) {
-			[appController selectTrack:nextPe];
-		}
-
-		return nextPe;
-	}
-}
-
-- (NSArray *)filterPlaylistOnAlbum:(NSString *)album {
-	NSPredicate *predicate;
-	if([album length] > 0)
-		predicate = [NSPredicate predicateWithFormat:@"album == %@", album];
-	else
-		predicate = [NSPredicate predicateWithFormat:@"album == nil || album == %@", @""];
-
-	return [[self arrangedObjects] filteredArrayUsingPredicate:predicate];
+	return [self.playbackOrder nextEntryAfter:pe ignoreRepeatOne:ignoreRepeatOne startingIn:self.shownPlaylist];
 }
 
 - (PlaylistEntry *)getPrevEntry:(PlaylistEntry *)pe {
@@ -1541,45 +1489,11 @@ BOOL showTrashConsent(NSWindow *window) {
 }
 
 - (PlaylistEntry *)getPrevEntry:(PlaylistEntry *)pe ignoreRepeatOne:(BOOL)ignoreRepeatOne {
-	BOOL selectionFollows = [[NSUserDefaults standardUserDefaults] boolForKey:@"selectionFollowsPlayback"];
+	return [self.playbackOrder previousEntryBefore:pe ignoreRepeatOne:ignoreRepeatOne];
+}
 
-	if(!ignoreRepeatOne && [[NSUserDefaults standardUserDefaults] boolForKey:@"alwaysStopAfterCurrent"]) {
-		if(selectionFollows) {
-			PlaylistEntry *prevPe = [self getPrevEntry:pe ignoreRepeatOne:YES];
-			[appController selectTrack:prevPe];
-		}
-		return nil;
-	}
-
-	if(!ignoreRepeatOne && [self repeat] == RepeatModeRepeatOne) {
-		if(selectionFollows) {
-			[appController selectTrack:pe];
-		}
-		return pe;
-	}
-
-	if([self shuffle] != ShuffleOff) {
-		PlaylistEntry *prevPe = [self shuffledEntryAtIndex:(pe.shuffleIndex - 1)];
-		if(selectionFollows && prevPe) {
-			[appController selectTrack:prevPe];
-		}
-		return prevPe;
-	} else {
-		NSInteger i;
-		if(pe.index < 0) // Was a current entry, now removed.
-		{
-			i = -pe.index - 2;
-		} else {
-			i = pe.index - 1;
-		}
-
-		PlaylistEntry *prevPe = [self entryAtIndex:i];
-		if(selectionFollows) {
-			[appController selectTrack:prevPe];
-		}
-
-		return prevPe;
-	}
+- (PlaylistEntry *)firstEntryToPlay {
+	return [self.playbackOrder firstEntryInPlaylist:self.shownPlaylist];
 }
 
 - (BOOL)next {
@@ -1605,179 +1519,66 @@ BOOL showTrashConsent(NSWindow *window) {
 	return YES;
 }
 
-- (NSArray *)shuffleAlbums {
-	NSArray *newList = [self arrangedObjects];
-	NSMutableArray *temp;
-	NSSortDescriptor *sortDescriptorTrack = [[NSSortDescriptor alloc] initWithKey:@"track"
-	                                                                    ascending:YES];
-	NSSortDescriptor *sortDescriptorDisc = [[NSSortDescriptor alloc] initWithKey:@"disc"
-	                                                                   ascending:YES];
-	NSArray *albums = [newList valueForKey:@"album"];
-	albums = [[NSSet setWithArray:albums] allObjects];
-	NSArray *tempList = [Shuffle shuffleList:albums];
-	temp = [NSMutableArray new];
-	BOOL blankAdded = NO;
-	for(NSString *album in tempList) {
-		NSString *theAlbum = album;
-		if((id)album == [NSNull null]) {
-			if(blankAdded)
-				continue;
-			else
-				theAlbum = @"";
-			blankAdded = YES;
-		} else if([album isEqualToString:@""]) {
-			if(blankAdded) continue;
-			blankAdded = YES;
-		}
-		NSArray *albumContent = [self filterPlaylistOnAlbum:theAlbum];
-		NSArray *sortedContent =
-		[albumContent sortedArrayUsingDescriptors:@[sortDescriptorDisc, sortDescriptorTrack]];
-		if(sortedContent && [sortedContent count])
-			[temp addObjectsFromArray:sortedContent];
-	}
-	return temp;
-}
-
 - (void)readQueueFromDataStore {
-	NSPredicate *hasUrlPredicate = [NSPredicate predicateWithFormat:@"urlString != nil && urlString != %@", @""];
-	NSPredicate *deletedPredicate = [NSPredicate predicateWithFormat:@"deLeted == NO || deLeted == nil"];
-	NSPredicate *queuedPredicate = [NSPredicate predicateWithFormat:@"queued == YES"];
-
-	NSSortDescriptor *sortDescriptor = [NSSortDescriptor sortDescriptorWithKey:@"queuePosition" ascending:YES];
-
-	NSCompoundPredicate *predicate = [NSCompoundPredicate andPredicateWithSubpredicates:@[deletedPredicate, hasUrlPredicate, queuedPredicate]];
-	
-	NSFetchRequest *request = [NSFetchRequest fetchRequestWithEntityName:@"PlaylistEntry"];
-	request.predicate = predicate;
-	request.sortDescriptors = @[sortDescriptor];
-
-	[self.persistentContainer.viewContext performBlockAndWait:^{
-		NSError *error = nil;
-		NSArray *results = [self.persistentContainer.viewContext executeFetchRequest:request error:&error];
-
-		if(results && [results count] > 0) {
-			[queueList removeAllObjects];
-			NSIndexSet *indexSet = [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, [results count])];
-			[queueList insertObjects:results atIndexes:indexSet];
-		}
-	}];
-}
-
-- (void)readShuffleListFromDataStore {
-	NSPredicate *predicate = [NSPredicate predicateWithFormat:@"deLeted == NO || deLeted == nil || urlString == nil"];
-
-	NSSortDescriptor *sortDescriptor = [NSSortDescriptor sortDescriptorWithKey:@"shuffleIndex" ascending:YES];
-
-	NSFetchRequest *request = [NSFetchRequest fetchRequestWithEntityName:@"PlaylistEntry"];
-	request.predicate = predicate;
-	request.sortDescriptors = @[sortDescriptor];
-
-	[self.persistentContainer.viewContext performBlockAndWait:^{
-		NSError *error = nil;
-		NSArray *results = [self.persistentContainer.viewContext executeFetchRequest:request error:&error];
-
-		if(results && [results count] > 0) {
-			[shuffleList removeAllObjects];
-			NSIndexSet *indexSet = [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, [results count])];
-			[shuffleList insertObjects:results atIndexes:indexSet];
-		}
-	}];
-}
-
-- (void)addShuffledListToFront {
-	NSArray *newList;
-	NSIndexSet *indexSet;
-
-	if([self shuffle] == ShuffleAlbums) {
-		newList = [self shuffleAlbums];
-	} else {
-		newList = [Shuffle shuffleList:[self arrangedObjects]];
-	}
-
-	indexSet = [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, [newList count])];
-
-	[shuffleList insertObjects:newList atIndexes:indexSet];
-
-	int i;
-	for(i = 0; i < [shuffleList count]; i++) {
-		[shuffleList[i] setShuffleIndex:i];
-	}
-	[self commitPersistentStoreAsync];
-}
-
-- (void)addShuffledListToBack {
-	NSArray *newList;
-	NSIndexSet *indexSet;
-
-	if([self shuffle] == ShuffleAlbums) {
-		newList = [self shuffleAlbums];
-	} else {
-		newList = [Shuffle shuffleList:[self arrangedObjects]];
-	}
-
-	indexSet =
-	[NSIndexSet indexSetWithIndexesInRange:NSMakeRange([shuffleList count], [newList count])];
-
-	[shuffleList insertObjects:newList atIndexes:indexSet];
-
-	unsigned long i;
-	for(i = ([shuffleList count] - [newList count]); i < [shuffleList count]; i++) {
-		[shuffleList[i] setShuffleIndex:(int)i];
-	}
-	[self commitPersistentStoreAsync];
+	[self.playbackOrder loadQueueInContext:self.persistentContainer.viewContext];
 }
 
 - (void)resetShuffleList {
-	[shuffleList removeAllObjects];
+	[self.playbackOrder resetShuffleInPlaylist:self.shownPlaylist current:currentEntry];
+}
 
-	[self addShuffledListToFront];
+- (Playlist *)playingPlaylist {
+	return currentEntry.playlist;
+}
 
-	if(currentEntry && currentEntry.index >= 0) {
-		if([self shuffle] == ShuffleAlbums) {
-			NSString *currentAlbum = currentEntry.album;
-			if(!currentAlbum) currentAlbum = @"";
+- (void)stopPlayback {
+	[playbackController stop:self];
+}
 
-			NSArray *wholeAlbum = [self filterPlaylistOnAlbum:currentAlbum];
+- (void)playingPlaylistDidChange {
+	[playbackController playlistDidChange:self];
+}
 
-			// First prune the shuffle list of the currently playing album
-			long i, j;
-			for(i = 0; i < [shuffleList count];) {
-				if([wholeAlbum containsObject:shuffleList[i]]) {
-					[shuffleList removeObjectAtIndex:i];
-				} else {
-					++i;
-				}
-			}
+- (void)showPlaylist:(Playlist *)playlist {
+	if(!playlist || playlist == _shownPlaylist) return;
 
-			// Then insert the playing album at the start
-			NSIndexSet *indexSet =
-			[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, [wholeAlbum count])];
+	if(_shownPlaylist.uuid) {
+		if(!viewStates) viewStates = [NSMutableDictionary new];
+		viewStates[_shownPlaylist.uuid.UUIDString] = @{
+			@"selection": [self selectedObjects],
+			@"scroll": [NSValue valueWithPoint:self.tableView.enclosingScrollView.contentView.bounds.origin]
+		};
+	}
 
-			[shuffleList insertObjects:wholeAlbum atIndexes:indexSet];
-
-			// Oops, gotta reset the shuffle indexes
-			for(i = 0, j = [shuffleList count]; i < j; ++i) {
-				[shuffleList[i] setShuffleIndex:(int)i];
-			}
-			[self commitPersistentStoreAsync];
-		} else {
-			[shuffleList insertObject:currentEntry atIndex:0];
-			[currentEntry setShuffleIndex:0];
-
-			// Need to rejigger so the current entry is at the start now...
-			long i, j;
-			BOOL found = NO;
-			for(i = 1, j = [shuffleList count]; i < j && !found; i++) {
-				if(shuffleList[i] == currentEntry) {
-					found = YES;
-					[shuffleList removeObjectAtIndex:i];
-				} else {
-					[shuffleList[i] setShuffleIndex:(int)i];
-				}
-			}
-			[self commitPersistentStoreAsync];
+	[self setFilterPredicate:nil];
+	// A column sort is already the playlist's order (its indexes follow the
+	// table); keep the content in that order and show the next unsorted.
+	if([[self sortDescriptors] count]) {
+		[self setContent:[[self arrangedObjects] mutableCopy]];
+		[super setSortDescriptors:@[]];
+		for(NSTableColumn *column in [self.tableView tableColumns]) {
+			[self.tableView setIndicatorImage:nil inTableColumn:column];
 		}
 	}
+	// Undo works on rows of the playlist it was done in. Clearing it also
+	// resets registration, so not while launch has it off.
+	if([[self undoManager] isUndoRegistrationEnabled]) [[self undoManager] removeAllActions];
+
+	[self willChangeValueForKey:@"shownPlaylist"];
+	_shownPlaylist = playlist;
+	[self didChangeValueForKey:@"shownPlaylist"];
+	if(playlist.uuid) [[NSUserDefaults standardUserDefaults] setObject:playlist.uuid.UUIDString forKey:@"shownPlaylist"];
+
+	[self setContent:[playlist.orderedEntries mutableCopy]];
+
+	NSDictionary *state = playlist.uuid ? viewStates[playlist.uuid.UUIDString] : nil;
+	[self setSelectedObjects:state[@"selection"] ?: @[]];
+	if(state[@"scroll"]) {
+		[self.tableView scrollPoint:[state[@"scroll"] pointValue]];
+	} else {
+		[self.tableView scrollRowToVisible:0];
+	}
+	[self commitPersistentStoreAsync];
 }
 
 - (void)setCurrentEntry:(PlaylistEntry *)pe {
@@ -1796,23 +1597,21 @@ BOOL showTrashConsent(NSWindow *window) {
 
 	[self commitPersistentStoreAsync];
 
-	NSMutableIndexSet *refreshSet = [NSMutableIndexSet new];
-
-	if(currentEntry != nil && !currentEntry.deLeted && currentEntry.index < NSNotFound) [refreshSet addIndex:currentEntry.index];
-	if(pe != nil && !pe.deLeted && pe.index < NSNotFound) [refreshSet addIndex:pe.index];
-
-	// Refresh entire row to refresh tooltips
-	unsigned long columns = [[self.tableView tableColumns] count];
-	[self.tableView reloadDataForRowIndexes:refreshSet columnIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, columns)]];
-
-	if(pe != nil) [self.tableView scrollRowToVisible:pe.index];
-
+	PlaylistEntry *previous = currentEntry;
+	[self willChangeValueForKey:@"playingPlaylist"];
 	currentEntry = pe;
+	[self didChangeValueForKey:@"playingPlaylist"];
+
+	[self reloadRowsForEntries:@[previous ?: pe, pe ?: previous]];
+
+	NSInteger row = [self rowForEntry:pe];
+	if(row != NSNotFound) [self.tableView scrollRowToVisible:row];
 }
 
 - (void)setShuffle:(ShuffleMode)s {
 	[[NSUserDefaults standardUserDefaults] setInteger:s forKey:@"shuffle"];
-	if(s != ShuffleOff) [self resetShuffleList];
+	// A new order for what plays, or for what will.
+	if(s != ShuffleOff) [self.playbackOrder resetShuffleInPlaylist:(currentEntry.playlist ?: self.shownPlaylist) current:currentEntry];
 
 	[playbackController playlistDidChange:self];
 }
@@ -1880,8 +1679,33 @@ BOOL showTrashConsent(NSWindow *window) {
 	[spotlightWindowController searchForAlbum:[entry album]];
 }
 
-- (NSMutableArray *)queueList {
-	return queueList;
+- (NSArray<PlaylistEntry *> *)queueList {
+	return self.playbackOrder.queue;
+}
+
+/// The table row showing `pe`, or NSNotFound when it has none: removed, in
+/// another playlist, or hidden by the search. An entry's index is its row
+/// unless the table is searched or sorted.
+- (NSInteger)rowForEntry:(PlaylistEntry *)pe {
+	if(!pe || pe.deLeted || pe.playlist != self.shownPlaylist) return NSNotFound;
+	NSArray *arranged = [self arrangedObjects];
+	NSInteger row = pe.index;
+	if(row >= 0 && row < [arranged count] && arranged[row] == pe) return row;
+	return [arranged indexOfObjectIdenticalTo:pe];
+}
+
+/// Redraws the rows of `entries` that the table shows, whole, for their
+/// tooltips.
+- (void)reloadRowsForEntries:(id<NSFastEnumeration>)entries {
+	NSMutableIndexSet *refreshSet = [NSMutableIndexSet new];
+	for(PlaylistEntry *pe in entries) {
+		NSInteger row = [self rowForEntry:pe];
+		if(row != NSNotFound) [refreshSet addIndex:row];
+	}
+	if(![refreshSet count]) return;
+
+	unsigned long columns = [[self.tableView tableColumns] count];
+	[self.tableView reloadDataForRowIndexes:refreshSet columnIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, columns)]];
 }
 
 - (IBAction)emptyQueueList:(id)sender {
@@ -1889,59 +1713,22 @@ BOOL showTrashConsent(NSWindow *window) {
 }
 
 - (void)emptyQueueListUnsynced {
-	NSMutableIndexSet *refreshSet = [NSMutableIndexSet new];
+	NSArray *queued = self.playbackOrder.queue;
+	[self.playbackOrder emptyQueue];
+	[self reloadRowsForEntries:queued];
+}
 
-	for(PlaylistEntry *queueItem in queueList) {
-		queueItem.queued = NO;
-		[queueItem setQueuePosition:-1];
-		[refreshSet addIndex:[queueItem index]];
-	}
-
-	[queueList removeAllObjects];
-
-	[self commitPersistentStoreAsync];
-
-	// Refresh entire row to refresh tooltips
-	unsigned long columns = [[self.tableView tableColumns] count];
-	[self.tableView reloadDataForRowIndexes:refreshSet columnIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, columns)]];
+- (void)addEntriesToQueue:(NSArray<PlaylistEntry *> *)entries {
+	[self.playbackOrder addToQueue:entries];
+	[self reloadRowsForEntries:self.playbackOrder.queue];
 }
 
 - (void)toggleQueuedForEntries:(NSArray *)entries {
-	NSMutableIndexSet *refreshSet = [NSMutableIndexSet new];
-
-	for(PlaylistEntry *queueItem in entries) {
-		if(queueItem.queued) {
-			[queueList removeObject:queueItem];
-
-			queueItem.queued = NO;
-			queueItem.queuePosition = -1;
-		} else {
-			queueItem.queued = YES;
-			queueItem.queuePosition = (int)[queueList count];
-
-			[queueList addObject:queueItem];
-		}
-
-		[refreshSet addIndex:[queueItem index]];
-
-		DLog(@"TOGGLE QUEUED: %i", queueItem.queued);
-	}
-
-	for(PlaylistEntry *queueItem in queueList) {
-		if(![entries containsObject:queueItem])
-			[refreshSet addIndex:[queueItem index]];
-	}
-
-	int i = 0;
-	for(PlaylistEntry *cur in queueList) {
-		cur.queuePosition = i++;
-	}
-
-	[self commitPersistentStoreAsync];
-
-	// Refresh entire row to refresh tooltips
-	unsigned long columns = [[self.tableView tableColumns] count];
-	[self.tableView reloadDataForRowIndexes:refreshSet columnIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, columns)]];
+	// Every queued row renumbers, besides the toggled ones.
+	NSMutableSet *affected = [NSMutableSet setWithArray:entries];
+	[affected addObjectsFromArray:self.playbackOrder.queue];
+	[self.playbackOrder toggleQueued:entries];
+	[self reloadRowsForEntries:affected];
 }
 
 - (IBAction)toggleQueued:(id)sender {
@@ -1966,83 +1753,31 @@ BOOL showTrashConsent(NSWindow *window) {
 }
 
 - (IBAction)removeFromQueue:(id)sender {
-	NSMutableIndexSet *refreshSet = [NSMutableIndexSet new];
-
-	for(PlaylistEntry *queueItem in [self selectedObjects]) {
-		queueItem.queued = NO;
-		queueItem.queuePosition = -1;
-
-		[queueList removeObject:queueItem];
-
-		[refreshSet addIndex:[queueItem index]];
-	}
-
-	for(PlaylistEntry *queueItem in queueList) {
-		[refreshSet addIndex:[queueItem index]];
-	}
-
-	int i = 0;
-	for(PlaylistEntry *cur in queueList) {
-		cur.queuePosition = i++;
-	}
-
-	[self commitPersistentStoreAsync];
-
-	// Refresh entire row to refresh tooltips
-	unsigned long columns = [[self.tableView tableColumns] count];
-	[self.tableView reloadDataForRowIndexes:refreshSet columnIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, columns)]];
+	NSMutableSet *affected = [NSMutableSet setWithArray:[self selectedObjects]];
+	[affected addObjectsFromArray:self.playbackOrder.queue];
+	[self.playbackOrder removeFromQueue:[self selectedObjects]];
+	[self reloadRowsForEntries:affected];
 }
 
 - (IBAction)addToQueue:(id)sender {
-	NSMutableIndexSet *refreshSet = [NSMutableIndexSet new];
-
-	for(PlaylistEntry *queueItem in [self selectedObjects]) {
-		queueItem.queued = YES;
-		queueItem.queuePosition = (int)[queueList count];
-
-		[queueList addObject:queueItem];
-	}
-
-	for(PlaylistEntry *queueItem in queueList) {
-		[refreshSet addIndex:[queueItem index]];
-	}
-
-	int i = 0;
-	for(PlaylistEntry *cur in queueList) {
-		cur.queuePosition = i++;
-	}
-
-	[self commitPersistentStoreAsync];
-
-	// Refresh entire row to refresh tooltips
-	unsigned long columns = [[self.tableView tableColumns] count];
-	[self.tableView reloadDataForRowIndexes:refreshSet columnIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, columns)]];
+	[self addEntriesToQueue:[self selectedObjects]];
 }
 
 - (IBAction)stopAfterCurrent:(id)sender {
 	currentEntry.stopAfter = !currentEntry.stopAfter;
 	[self commitPersistentStoreAsync];
 
-	NSIndexSet *refreshSet = [NSIndexSet indexSetWithIndex:[currentEntry index]];
-
-	// Refresh entire row to refresh tooltips
-	unsigned long columns = [[self.tableView tableColumns] count];
-	[self.tableView reloadDataForRowIndexes:refreshSet columnIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, columns)]];
+	if(currentEntry) [self reloadRowsForEntries:@[currentEntry]];
 }
 
 - (IBAction)stopAfterSelection:(id)sender {
-	NSMutableIndexSet *refreshSet = [NSMutableIndexSet new];
-
 	for(PlaylistEntry *pe in [self selectedObjects]) {
 		pe.stopAfter = !pe.stopAfter;
-		[refreshSet addIndex:pe.index];
 	}
 
 	[self commitPersistentStoreAsync];
 
-	// Refresh entire row of all affected items to update tooltips
-	unsigned long columns = [[self.tableView tableColumns] count];
-	[self.tableView reloadDataForRowIndexes:refreshSet columnIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, columns)]];
+	[self reloadRowsForEntries:[self selectedObjects]];
 }
 
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem {
@@ -2055,9 +1790,13 @@ BOOL showTrashConsent(NSWindow *window) {
 		return NO;
 	}
 
-	if(action == @selector(emptyQueueList:) && ([queueList count] < 1)) return NO;
+	if(action == @selector(emptyQueueList:) && ([self.playbackOrder.queue count] < 1)) return NO;
 
 	if(action == @selector(stopAfterCurrent:) && currentEntry.stopAfter) return NO;
+
+	// The last playlist stays.
+	if(action == NSSelectorFromString(@"deletePlaylist:") &&
+	   [[Playlist playlistsInContext:self.persistentContainer.viewContext] count] < 2) return NO;
 
 	// if nothing is selected, gray out these
 	if([[self selectedObjects] count] < 1) {
@@ -2072,19 +1811,13 @@ BOOL showTrashConsent(NSWindow *window) {
 		if(action == @selector(searchByAlbum:)) return NO;
 
 		if(action == @selector(stopAfterSelection:)) return NO;
+
+		if(action == NSSelectorFromString(@"newPlaylistFromSelection:")) return NO;
+
+		if(action == NSSelectorFromString(@"addSelectionToPlaylist:")) return NO;
 	}
 
 	return YES;
-}
-
-// Asynchronous event inlets:
-- (void)addURLsInBackground:(NSDictionary *)input {
-	NSUInteger row = [[self content] count];
-
-	NSMutableDictionary *_input = [input mutableCopy];
-	[_input setObject:@(row) forKey:@"index"];
-
-	[self insertURLsInBackground:_input];
 }
 
 static inline void dispatch_sync_reentrant(dispatch_queue_t queue, dispatch_block_t block) {
@@ -2095,36 +1828,97 @@ static inline void dispatch_sync_reentrant(dispatch_queue_t queue, dispatch_bloc
 	}
 }
 
+// Asynchronous event inlets:
+- (void)addURLsInBackground:(NSDictionary *)input {
+	NSMutableDictionary *_input = [input mutableCopy];
+	[_input setObject:@(-1) forKey:@"index"];
+
+	[self insertURLsInBackground:_input];
+}
+
 - (void)insertURLsInBackground:(NSDictionary *)input {
-	[self performSelectorOnMainThread:@selector(clearFilterPredicate:) withObject:self waitUntilDone:YES];
-	
-	NSArray *entries = [input objectForKey:@"entries"];
-	NSUInteger row = [[input objectForKey:@"index"] integerValue];
-	BOOL sort = [[input objectForKey:@"sort"] boolValue];
-	URLOrigin origin = (URLOrigin)[[input objectForKey:@"origin"] integerValue];
-
-	NSUInteger countNow = [[self content] count];
-
-	dispatch_sync_reentrant(dispatch_get_main_queue(), ^{
-		[self willInsertURLs:entries origin:origin];
-	});
-
-	if(countNow && row && ![[self content] count]) {
-		row = 0;
+	// The playlist shown as the user acted, which loading in turn after
+	// others may not reach until another is
+	if(![input objectForKey:@"playlist"]) {
+		__block Playlist *playlist = nil;
+		dispatch_sync_reentrant(dispatch_get_main_queue(), ^{
+			playlist = self.shownPlaylist;
+		});
+		if(playlist) {
+			NSMutableDictionary *_input = [input mutableCopy];
+			[_input setObject:playlist forKey:@"playlist"];
+			input = _input;
+		}
 	}
 
-	NSArray *urlsAccepted = [playlistLoader insertURLs:entries atIndex:row sort:sort];
+	[self performSelectorInBackground:@selector(loadURLsForInput:) withObject:input];
+}
+
+- (void)loadURLsForInput:(NSDictionary *)input {
+	NSArray *entries = [input objectForKey:@"entries"];
+	NSNumber *index = [input objectForKey:@"index"];
+	NSInteger row = index ? [index integerValue] : -1;
+	BOOL sort = [[input objectForKey:@"sort"] boolValue];
+	URLOrigin origin = (URLOrigin)[[input objectForKey:@"origin"] integerValue];
+	Playlist *playlist = [input objectForKey:@"playlist"];
+
+	dispatch_sync_reentrant(dispatch_get_main_queue(), ^{
+		if(!playlist || playlist == self.shownPlaylist) [self clearFilterPredicate:self];
+		[self willInsertURLs:entries origin:origin playlist:playlist];
+	});
+
+	NSArray *urlsAccepted = [playlistLoader insertURLs:entries atIndex:row sort:sort intoPlaylist:playlist];
 	dispatch_sync_reentrant(dispatch_get_main_queue(), ^{
 		[self didInsertURLs:urlsAccepted origin:origin];
 	});
+}
 
-	dispatch_sync_reentrant(dispatch_get_main_queue(), ^{
-		if([self shuffle] != ShuffleOff) [self resetShuffleList];
-	});
+// Whether `playlist` is still there to add to.
+static BOOL playlistIsLive(Playlist *playlist) {
+	return playlist && [playlist managedObjectContext] && ![playlist isDeleted];
+}
+
+- (void)insertEntries:(NSArray<PlaylistEntry *> *)entries atIndex:(NSInteger)index intoPlaylist:(Playlist *)playlist {
+	if(![entries count]) return;
+	if(!playlistIsLive(playlist)) playlist = self.shownPlaylist;
+
+	if(playlist == self.shownPlaylist) {
+		[self clearFilterPredicate:self];
+		NSInteger count = [[self arrangedObjects] count];
+		if(index < 0 || index > count) index = count;
+		[self insertObjects:entries atArrangedObjectIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(index, [entries count])]];
+		return;
+	}
+
+	// Not in the table: into the playlist's stored order alone, with no
+	// undo, as undo is of the playlist shown.
+	[playlist insertEntries:entries atIndex:index];
+	[self commitPersistentStoreAsync];
+	if(playlist == self.playingPlaylist) {
+		if([self shuffle] != ShuffleOff) [self.playbackOrder resetShuffleInPlaylist:playlist current:currentEntry];
+		[self playingPlaylistDidChange];
+	}
+}
+
+// Removes every entry of `playlist`, shown or not.
+- (void)clearPlaylist:(Playlist *)playlist {
+	if(!playlistIsLive(playlist) || playlist == self.shownPlaylist) {
+		[self clear:self];
+		return;
+	}
+
+	NSArray<PlaylistEntry *> *entries = playlist.orderedEntries;
+	if(![entries count]) return;
+	[self.playbackOrder willRemoveEntries:entries current:currentEntry];
+	for(PlaylistEntry *pe in entries) {
+		pe.deLeted = YES;
+	}
+	[self commitPersistentStoreAsync];
+	if(playlist == self.playingPlaylist) [self playingPlaylistDidChange];
 }
 
 // Event inlets:
-- (void)willInsertURLs:(NSArray *)urls origin:(URLOrigin)origin {
+- (void)willInsertURLs:(NSArray *)urls origin:(URLOrigin)origin playlist:(Playlist *)playlist {
 	if(![urls count]) return;
 
 	CGEventRef event = CGEventCreate(NULL /*default event source*/);
@@ -2150,7 +1944,7 @@ static inline void dispatch_sync_reentrant(dispatch_queue_t queue, dispatch_bloc
 	}
 
 	if(shouldClear) {
-		[self clear:self];
+		[self clearPlaylist:playlist];
 	}
 }
 
@@ -2204,19 +1998,12 @@ static inline void dispatch_sync_reentrant(dispatch_queue_t queue, dispatch_bloc
 - (IBAction)resetPlaycounts:(id)sender {
 	NSArray *selectedobjects = [self selectedObjects];
 	if([selectedobjects count]) {
-		NSMutableIndexSet *refreshRows = [NSMutableIndexSet new];
-
 		for(PlaylistEntry *pe in selectedobjects) {
 			[self resetPlayCountForTrack:pe];
-			if(pe.index >= 0 && pe.index < NSNotFound) {
-				[refreshRows addIndex:pe.index];
-			}
 		}
 		[self commitPersistentStoreAsync];
 
-		NSIndexSet *refreshColumns = [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, [[self.tableView tableColumns] count])];
-
-		[self.tableView reloadDataForRowIndexes:refreshRows columnIndexes:refreshColumns];
+		[self reloadRowsForEntries:selectedobjects];
 	}
 }
 
@@ -2228,18 +2015,7 @@ static inline void dispatch_sync_reentrant(dispatch_queue_t queue, dispatch_bloc
 		}
 		[self commitPersistentStoreAsync];
 
-		NSMutableIndexSet *refreshRows = [NSMutableIndexSet new];
-
-		for(PlaylistEntry *pe in selectedobjects) {
-			if(pe.index >= 0 && pe.index < NSNotFound) {
-				[refreshRows addIndex:pe.index];
-			}
-		}
-
-		// Refresh entire row to refresh tooltips
-		NSIndexSet *refreshColumns = [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, [[self.tableView tableColumns] count])];
-
-		[self.tableView reloadDataForRowIndexes:refreshRows columnIndexes:refreshColumns];
+		[self reloadRowsForEntries:selectedobjects];
 	}
 }
 

@@ -220,7 +220,7 @@ static NSString *playlistSavedColumnsID = @"Playlist Saved Columns v0";
 	[self tableShouldSync];
 }
 
-- (IBAction)toggleColumn:(id)sender {
+- (IBAction)toggleColumn:(NSMenuItem *)sender {
 	id tc = [sender representedObject];
 
 	if([sender state] == NSControlStateValueOff) {
@@ -345,9 +345,15 @@ static NSString *playlistSavedColumnsID = @"Playlist Saved Columns v0";
 }
 
 - (IBAction)scrollToCurrentEntry:(id)sender {
-	[self scrollRowToVisible:[[playlistController currentEntry] index]];
-	[self selectRowIndexes:[NSIndexSet indexSetWithIndex:(NSUInteger)[[playlistController currentEntry] index]]
-	  byExtendingSelection:NO];
+	PlaylistEntry *pe = [playlistController currentEntry];
+	if(!pe) return;
+	// To its playlist first, and out of a search that hides it.
+	if(pe.playlist) [playlistController showPlaylist:pe.playlist];
+	if([playlistController rowForEntry:pe] == NSNotFound) [playlistController clearFilterPredicate:self];
+	NSInteger row = [playlistController rowForEntry:pe];
+	if(row == NSNotFound) return;
+	[self scrollRowToVisible:row];
+	[self selectRowIndexes:[NSIndexSet indexSetWithIndex:row] byExtendingSelection:NO];
 }
 
 - (IBAction)saveSelectionAsPlaylist:(id)sender {
@@ -412,6 +418,24 @@ static NSString *playlistSavedColumnsID = @"Playlist Saved Columns v0";
 	if([filePaths count]) {
 		[pboard writeObjects:filePaths];
 	}
+
+	copiedEntries = entries;
+	copiedChangeCount = [pboard changeCount];
+}
+
+// Copies of the entries the last copy put on the pasteboard, or nil when
+// something else has written to it since, or any of them has gone or is
+// still loading.
+- (NSArray<PlaylistEntry *> *)copiesOfCopiedEntries:(NSPasteboard *)pboard {
+	if(![copiedEntries count] || [pboard changeCount] != copiedChangeCount) return nil;
+	for(PlaylistEntry *pe in copiedEntries) {
+		if(!pe.managedObjectContext || pe.isDeleted || !pe.metadataLoaded) return nil;
+	}
+	NSMutableArray *copies = [NSMutableArray arrayWithCapacity:[copiedEntries count]];
+	for(PlaylistEntry *pe in copiedEntries) {
+		[copies addObject:[pe copyForPlaylist]];
+	}
+	return copies;
 }
 
 - (IBAction)cut:(id)sender {
@@ -426,6 +450,18 @@ static NSString *playlistSavedColumnsID = @"Playlist Saved Columns v0";
 	// Determine the type of object that was dropped
 	NSArray *supportedTypes = @[CogUrlsPboardType, NSPasteboardTypeFileURL, iTunesDropType];
 	NSPasteboard *pboard = [NSPasteboard generalPasteboard];
+
+	// Our own copy or cut: the entries themselves, tags and all.
+	NSArray<PlaylistEntry *> *copies = [self copiesOfCopiedEntries:pboard];
+	if(copies) {
+		[playlistController clearFilterPredicate:self];
+		NSUInteger row = [[playlistController arrangedObjects] count];
+		[playlistController insertObjects:copies
+		          atArrangedObjectIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(row, [copies count])]];
+		[playbackController playlistDidChange:playlistController];
+		return;
+	}
+
 	NSPasteboardType bestType = [pboard availableTypeFromArray:supportedTypes];
 #ifdef _DEBUG
 	DLog(@"All types:");
@@ -492,7 +528,7 @@ static NSString *playlistSavedColumnsID = @"Playlist Saved Columns v0";
 			                               @"sort": @NO,
 			                               @"origin": @(URLOriginInternal) };
 
-		[playlistController performSelectorInBackground:@selector(insertURLsInBackground:) withObject:loadEntriesData];
+		[playlistController insertURLsInBackground:loadEntriesData];
 	}
 }
 
@@ -540,10 +576,7 @@ static NSString *playlistSavedColumnsID = @"Playlist Saved Columns v0";
 
 - (IBAction)refreshTrack:(id)sender {
 	PlaylistEntry *pe = (PlaylistEntry *)sender;
-	if(pe && !pe.deLeted) {
-		unsigned long columns = [[self tableColumns] count];
-		[self reloadDataForRowIndexes:[NSIndexSet indexSetWithIndex:pe.index] columnIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, columns)]];
-	}
+	if(pe) [playlistController reloadRowsForEntries:@[pe]];
 }
 
 #if 0
