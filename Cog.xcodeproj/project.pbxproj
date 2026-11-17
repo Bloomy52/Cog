@@ -19,6 +19,8 @@
 		0A9CEA032861501700E47168 /* AboutWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A9CEA012861501700E47168 /* AboutWindowController.swift */; };
 		0ABA786A2F6B1ECF00537320 /* CreditsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ABA78692F6B1ECF00537320 /* CreditsView.swift */; };
 		0ABA786B2F6B1ECF00537320 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ABA78682F6B1ECF00537320 /* AboutView.swift */; };
+		0ABB324730843A3C000AAB12 /* WaveformController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ABB324630843A3C000AAB12 /* WaveformController.swift */; };
+		0ABB371330843A63000AAB12 /* WaveformSliderCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ABB371230843A63000AAB12 /* WaveformSliderCell.swift */; };
 		0AC233A32F6C3B4900E6FE2E /* SwiftUIIntrospect in Frameworks */ = {isa = PBXBuildFile; productRef = 0AC233A22F6C3B4900E6FE2E /* SwiftUIIntrospect */; };
 		171B57DD0C091F2B00F6AFAF /* flac.icns in Resources */ = {isa = PBXBuildFile; fileRef = 171B57D90C091F2B00F6AFAF /* flac.icns */; };
 		171B57DE0C091F2B00F6AFAF /* m4a.icns in Resources */ = {isa = PBXBuildFile; fileRef = 171B57DA0C091F2B00F6AFAF /* m4a.icns */; };
@@ -82,6 +84,8 @@
 		17F561400C3BD4F30019975C /* CogAudio.framework in Copy Files */ = {isa = PBXBuildFile; fileRef = 17F561330C3BD4DC0019975C /* CogAudio.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		17F6C8070F603701000D9DA9 /* PlaybackEventController.m in Sources */ = {isa = PBXBuildFile; fileRef = 17F6C8060F603701000D9DA9 /* PlaybackEventController.m */; };
 		17FAEBAC0F662985007C8707 /* ToolTipTextField.m in Sources */ = {isa = PBXBuildFile; fileRef = 17FAEBAB0F662985007C8707 /* ToolTipTextField.m */; };
+		1EBFAF4C15D626F515FDBA65 /* CogPlaylist.framework in Copy Files */ = {isa = PBXBuildFile; fileRef = A439B853591A600EFD69D4A1 /* CogPlaylist.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		36521C1430E83285BE9E2609 /* CogPlaylist.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A439B853591A600EFD69D4A1 /* CogPlaylist.framework */; };
 		420D8C3C2E4A0DC00020A67A /* LastFMAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 420D8C3B2E4A0DBC0020A67A /* LastFMAPI.swift */; };
 		4218AC502E469BC30024810A /* AudioScrobbler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4218AC4F2E469BC30024810A /* AudioScrobbler.swift */; };
 		42777C332E54E091005B0E11 /* Secrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42777C322E54E091005B0E11 /* Secrets.swift */; };
@@ -266,11 +270,7 @@
 		ED69CBC725BE32C00090B90D /* MASShortcut.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ED69CBBF25BE328C0090B90D /* MASShortcut.framework */; };
 		ED69CBCA25BE32E80090B90D /* MASShortcut.framework in Copy Files */ = {isa = PBXBuildFile; fileRef = ED69CBBF25BE328C0090B90D /* MASShortcut.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		EDAAA41F25A665C000731773 /* PositionSliderToolbarItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDAAA41E25A665C000731773 /* PositionSliderToolbarItem.swift */; };
-		0ABB324730843A3C000AAB12 /* WaveformController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ABB324630843A3C000AAB12 /* WaveformController.swift */; };
-		0ABB371330843A63000AAB12 /* WaveformSliderCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ABB371230843A63000AAB12 /* WaveformSliderCell.swift */; };
 		F6F96719102C709000D2C9B4 /* NSString+FinderCompare.m in Sources */ = {isa = PBXBuildFile; fileRef = F6F96718102C709000D2C9B4 /* NSString+FinderCompare.m */; };
-		1EBFAF4C15D626F515FDBA65 /* CogPlaylist.framework in Copy Files */ = {isa = PBXBuildFile; fileRef = A439B853591A600EFD69D4A1 /* CogPlaylist.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		36521C1430E83285BE9E2609 /* CogPlaylist.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A439B853591A600EFD69D4A1 /* CogPlaylist.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -385,6 +385,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 8DC2EF4F0486A6940098B216;
 			remoteInfo = CogAudio;
+		};
+		44E8E70C2A47F4A15E61367C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E2BAD84CB7CAF14F5B4EF778 /* CogPlaylist.xcodeproj */;
+			proxyType = 1;
+			remoteGlobalIDString = E80389F158B72B0D3636B1A4;
+			remoteInfo = CogPlaylist;
 		};
 		566D321A0D538550004466A5 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -722,12 +729,26 @@
 			remoteGlobalIDString = 8D5B49AC048680CD000E48DA;
 			remoteInfo = Pls;
 		};
+		AF5DB7373085A4F600699092 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E2BAD84CB7CAF14F5B4EF778 /* CogPlaylist.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = 3D044BD3C83B13469017859E;
+			remoteInfo = CogPlaylistTests;
+		};
 		B09E94340D747F7B0064F138 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = B09E94300D747F7B0064F138 /* FFMPEG.xcodeproj */;
 			proxyType = 2;
 			remoteGlobalIDString = 8D5B49B6048680CD000E48DA;
 			remoteInfo = FFMPEG;
+		};
+		B3D6276AA67F7AD284300D6F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E2BAD84CB7CAF14F5B4EF778 /* CogPlaylist.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = CC5502BA1C98A58CEA5F6E05;
+			remoteInfo = CogPlaylist;
 		};
 		CEC0CAFE000000000000D002 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -770,20 +791,6 @@
 			proxyType = 1;
 			remoteGlobalIDString = 0D827CD21990D4420010B8EF;
 			remoteInfo = MASShortcut;
-		};
-		B3D6276AA67F7AD284300D6F /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = E2BAD84CB7CAF14F5B4EF778 /* CogPlaylist.xcodeproj */;
-			proxyType = 2;
-			remoteGlobalIDString = CC5502BA1C98A58CEA5F6E05;
-			remoteInfo = CogPlaylist;
-		};
-		44E8E70C2A47F4A15E61367C /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = E2BAD84CB7CAF14F5B4EF778 /* CogPlaylist.xcodeproj */;
-			proxyType = 1;
-			remoteGlobalIDString = E80389F158B72B0D3636B1A4;
-			remoteInfo = CogPlaylist;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -896,6 +903,8 @@
 		0A9CEA012861501700E47168 /* AboutWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AboutWindowController.swift; path = Window/AboutWindowController.swift; sourceTree = "<group>"; };
 		0ABA78682F6B1ECF00537320 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AboutView.swift; path = Window/AboutView.swift; sourceTree = "<group>"; };
 		0ABA78692F6B1ECF00537320 /* CreditsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CreditsView.swift; path = Window/CreditsView.swift; sourceTree = "<group>"; };
+		0ABB324630843A3C000AAB12 /* WaveformController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WaveformController.swift; path = Window/WaveformController.swift; sourceTree = "<group>"; };
+		0ABB371230843A63000AAB12 /* WaveformSliderCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WaveformSliderCell.swift; path = Window/WaveformSliderCell.swift; sourceTree = "<group>"; };
 		171B57D90C091F2B00F6AFAF /* flac.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = flac.icns; sourceTree = "<group>"; };
 		171B57DA0C091F2B00F6AFAF /* m4a.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = m4a.icns; sourceTree = "<group>"; };
 		171B57DB0C091F2B00F6AFAF /* mp3.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = mp3.icns; sourceTree = "<group>"; };
@@ -1239,15 +1248,13 @@
 		CEC0CAFE000000000000F301 /* cog-mcp */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "cog-mcp"; sourceTree = BUILT_PRODUCTS_DIR; };
 		CEC0CAFE000000000000F302 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		DD4494A9B0444224A7025E10 /* PreferencesWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PreferencesWindow.swift; path = Preferences/PreferencesWindow.swift; sourceTree = "<group>"; };
+		E2BAD84CB7CAF14F5B4EF778 /* CogPlaylist.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = CogPlaylist.xcodeproj; path = CogPlaylist/CogPlaylist.xcodeproj; sourceTree = "<group>"; };
 		E983E24C795286EB454FFAC4 /* LyricsLookup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsLookup.swift; sourceTree = "<group>"; };
 		ED69CBB825BE328C0090B90D /* MASShortcut.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = MASShortcut.xcodeproj; path = Frameworks/shpakovski/MASShortcut/MASShortcut.xcodeproj; sourceTree = "<group>"; };
 		EDAAA41E25A665C000731773 /* PositionSliderToolbarItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PositionSliderToolbarItem.swift; path = Window/PositionSliderToolbarItem.swift; sourceTree = "<group>"; };
-		0ABB324630843A3C000AAB12 /* WaveformController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WaveformController.swift; path = Window/WaveformController.swift; sourceTree = "<group>"; };
-		0ABB371230843A63000AAB12 /* WaveformSliderCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WaveformSliderCell.swift; path = Window/WaveformSliderCell.swift; sourceTree = "<group>"; };
 		F56961334CC939A7158B7470 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
 		F6F96718102C709000D2C9B4 /* NSString+FinderCompare.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSString+FinderCompare.m"; sourceTree = "<group>"; };
 		F6F9671A102C70C800D2C9B4 /* NSString+FinderCompare.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSString+FinderCompare.h"; sourceTree = "<group>"; };
-		E2BAD84CB7CAF14F5B4EF778 /* CogPlaylist.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = CogPlaylist.xcodeproj; path = CogPlaylist/CogPlaylist.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -2229,6 +2236,15 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		ADFA9FA2E11CA3E755DEBBB7 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A439B853591A600EFD69D4A1 /* CogPlaylist.framework */,
+				AF5DB7383085A4F600699092 /* CogPlaylistTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 		B09E94310D747F7B0064F138 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -2274,14 +2290,6 @@
 				ED69CBBF25BE328C0090B90D /* MASShortcut.framework */,
 				ED69CBC125BE328C0090B90D /* MASShortcutTests.xctest */,
 				ED69CBC325BE328C0090B90D /* Demo.app */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-		ADFA9FA2E11CA3E755DEBBB7 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				A439B853591A600EFD69D4A1 /* CogPlaylist.framework */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -2815,6 +2823,20 @@
 			remoteRef = 8E8D41C60CBB0DA000135C1B /* PBXContainerItemProxy */;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
+		A439B853591A600EFD69D4A1 /* CogPlaylist.framework */ = {
+			isa = PBXReferenceProxy;
+			fileType = wrapper.framework;
+			path = CogPlaylist.framework;
+			remoteRef = B3D6276AA67F7AD284300D6F /* PBXContainerItemProxy */;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		AF5DB7383085A4F600699092 /* CogPlaylistTests.xctest */ = {
+			isa = PBXReferenceProxy;
+			fileType = wrapper.cfbundle;
+			path = CogPlaylistTests.xctest;
+			remoteRef = AF5DB7373085A4F600699092 /* PBXContainerItemProxy */;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
 		B09E94350D747F7B0064F138 /* FFMPEG.bundle */ = {
 			isa = PBXReferenceProxy;
 			fileType = wrapper.cfbundle;
@@ -2841,13 +2863,6 @@
 			fileType = wrapper.application;
 			path = Demo.app;
 			remoteRef = ED69CBC225BE328C0090B90D /* PBXContainerItemProxy */;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
-		A439B853591A600EFD69D4A1 /* CogPlaylist.framework */ = {
-			isa = PBXReferenceProxy;
-			fileType = wrapper.framework;
-			path = CogPlaylist.framework;
-			remoteRef = B3D6276AA67F7AD284300D6F /* PBXContainerItemProxy */;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
 /* End PBXReferenceProxy section */
@@ -3193,6 +3208,11 @@
 			name = CogAudio;
 			targetProxy = 17F5613E0C3BD4E90019975C /* PBXContainerItemProxy */;
 		};
+		627037B29E858AA59E304C68 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = CogPlaylist;
+			targetProxy = 44E8E70C2A47F4A15E61367C /* PBXContainerItemProxy */;
+		};
 		8327DBA8293CAD0A00CD0580 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = Organya;
@@ -3323,11 +3343,6 @@
 			name = MASShortcut;
 			targetProxy = ED69CBC525BE32B40090B90D /* PBXContainerItemProxy */;
 		};
-		627037B29E858AA59E304C68 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			name = CogPlaylist;
-			targetProxy = 44E8E70C2A47F4A15E61367C /* PBXContainerItemProxy */;
-		};
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
@@ -3447,6 +3462,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 3X23Y8PQPK;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
@@ -3529,6 +3545,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 3X23Y8PQPK;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
@@ -3704,6 +3721,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 3X23Y8PQPK;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
@@ -3830,6 +3848,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEFINES_MODULE = YES;
+				DEVELOPMENT_TEAM = 3X23Y8PQPK;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
@@ -3862,6 +3881,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
 				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 3X23Y8PQPK;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
@@ -3894,6 +3914,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEFINES_MODULE = YES;
+				DEVELOPMENT_TEAM = 3X23Y8PQPK;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
@@ -3928,6 +3949,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEFINES_MODULE = YES;
+				DEVELOPMENT_TEAM = 3X23Y8PQPK;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
@@ -3960,6 +3982,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
 				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 3X23Y8PQPK;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
@@ -3992,6 +4015,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
 				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 3X23Y8PQPK;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;

@@ -293,7 +293,7 @@ bool SpessaPlayer::startup() {
 	if(filteredGlobalBank) _filteredBanks.push_back(filteredGlobalBank);
 
 	SS_ProcessorOptions opts = {
-		.enable_effects = true,
+		.enable_effects = false,
 		.voice_cap = 512,
 		.interpolation = interp,
 		.preload_all_samples = false,
