@@ -2375,11 +2375,7 @@
 			isa = PBXGroup;
 			children = (
 				A439B853591A600EFD69D4A1 /* CogPlaylist.framework */,
-<<<<<<< HEAD
-				AF5DB7383085A4F600699092 /* CogPlaylistTests.xctest */,
-=======
-				0A00338B3086B90100C5352B /* CogPlaylistTests.xctest */,
->>>>>>> upstream/main
+                0A00338B3086B90100C5352B /* CogPlaylistTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -3008,16 +3004,6 @@
 			remoteRef = B3D6276AA67F7AD284300D6F /* PBXContainerItemProxy */;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
-<<<<<<< HEAD
-		AF5DB7383085A4F600699092 /* CogPlaylistTests.xctest */ = {
-			isa = PBXReferenceProxy;
-			fileType = wrapper.cfbundle;
-			path = CogPlaylistTests.xctest;
-			remoteRef = AF5DB7373085A4F600699092 /* PBXContainerItemProxy */;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
-=======
->>>>>>> upstream/main
 		B09E94350D747F7B0064F138 /* FFMPEG.bundle */ = {
 			isa = PBXReferenceProxy;
 			fileType = wrapper.cfbundle;
